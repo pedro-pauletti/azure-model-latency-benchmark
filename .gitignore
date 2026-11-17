@@ -13,6 +13,12 @@ __pycache__/
 /infra/
 /results/
 /tool-results/
+/exports/
+/tool-settings*.json
+*.pem
+*.key
+*.pfx
+*.p12
 *.log
 playwright-report/
 test-results/
