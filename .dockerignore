@@ -1,0 +1,10 @@
+**
+!Dockerfile
+!requirements.txt
+!*.py
+!benchmark.json
+!tool-benchmark.json
+!dashboard.template.html
+test_*.py
+deploy_containerapps.py
+provision*.py

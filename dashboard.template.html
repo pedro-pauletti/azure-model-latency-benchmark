@@ -1,0 +1,1726 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Azure OpenAI · Benchmark de latência</title>
+  <script>
+    (() => {
+      const param = new URLSearchParams(window.location.search).get("scoutTheme");
+      const theme =
+        param || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+      document.documentElement.setAttribute("data-theme", theme);
+    })();
+  </script>
+  <style>
+    :root {
+      color-scheme: light;
+      --cp-bg: #f7f4ef;
+      --cp-bg-elevated: #fcfbf8;
+      --cp-surface: #ffffff;
+      --cp-surface-soft: #f5f5f5;
+      --cp-border: #dedede;
+      --cp-border-strong: #919191;
+      --cp-text: #242424;
+      --cp-text-muted: #5c5c5c;
+      --cp-text-soft: #6f6f6f;
+      --cp-accent: #b11f4b;
+      --cp-accent-hover: #9a1a41;
+      --cp-accent-soft: rgba(177, 31, 75, 0.08);
+      --cp-accent-fg: #ffffff;
+      --cp-success: #16a34a;
+      --cp-danger: #dc2626;
+      --cp-warning: #f59e0b;
+      --cp-link: #0078d4;
+      --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.12);
+      --cp-overlay: rgba(255, 255, 255, 0.8);
+      --cp-panel: rgba(255, 255, 255, 0.86);
+      --cp-panel-strong: rgba(255, 255, 255, 0.96);
+      --cp-sheen: rgba(255, 255, 255, 0.55);
+      --cp-highlight: rgba(177, 31, 75, 0.12);
+    }
+    html[data-theme="dark"] {
+      color-scheme: dark;
+      --cp-bg: #3d3b3a;
+      --cp-bg-elevated: #343231;
+      --cp-surface: #292929;
+      --cp-surface-soft: #2e2e2e;
+      --cp-border: #474747;
+      --cp-border-strong: #5f5f5f;
+      --cp-text: #dedede;
+      --cp-text-muted: #919191;
+      --cp-text-soft: #b0b0b0;
+      --cp-accent: #fd8ea1;
+      --cp-accent-hover: #fb7b91;
+      --cp-accent-soft: rgba(253, 142, 161, 0.14);
+      --cp-accent-fg: #1a1a1a;
+      --cp-success: #4ade80;
+      --cp-danger: #f87171;
+      --cp-warning: #fbbf24;
+      --cp-link: #4da6ff;
+      --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
+      --cp-overlay: rgba(41, 41, 41, 0.88);
+      --cp-panel: rgba(41, 41, 41, 0.72);
+      --cp-panel-strong: rgba(41, 41, 41, 0.96);
+      --cp-sheen: rgba(255, 255, 255, 0.04);
+      --cp-highlight: rgba(253, 142, 161, 0.12);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--cp-bg); color: var(--cp-text); font: 15px/1.5 "Segoe UI", Aptos, Calibri, -apple-system, BlinkMacSystemFont, sans-serif; }
+    button, select, input { font: inherit; }
+    button, select { border: 1px solid var(--cp-border); border-radius: .625rem; background: var(--cp-surface); color: var(--cp-text); padding: 10px 12px; }
+    button { cursor: pointer; }
+    button:hover { border-color: var(--cp-accent); }
+    button:disabled { cursor: not-allowed; opacity: .5; }
+    [hidden] { display: none !important; }
+    input[type=number] { width: 108px; border: 1px solid var(--cp-border); background: var(--cp-surface); color: var(--cp-text); border-radius: .625rem; padding: 8px; }
+    input[type=range] { width: 100%; accent-color: var(--cp-accent); margin: 12px 0; }
+    .live-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
+    .slider-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+    .live-extra { display: flex; gap: 16px; flex-wrap: wrap; margin: 16px 0; }
+    .live-extra label { flex: 1; min-width: 100px; }
+    .live-extra input { width: 100%; }
+    .model-picker { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 16px 0; }
+    fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+    .primary { color: var(--cp-accent-fg); background: var(--cp-accent); border-color: var(--cp-accent); }
+    .primary:hover { background: var(--cp-accent-hover); }
+    .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 16px; }
+    progress { width: 100%; accent-color: var(--cp-accent); height: 12px; margin-top: 16px; }
+    .live-log { font: 12px/1.6 Consolas, "Courier New", Courier, monospace; max-height: 200px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background: var(--cp-surface-soft); border-radius: .625rem; }
+    .live-error { color: var(--cp-danger); white-space: pre-wrap; overflow-wrap: anywhere; }
+    .rank { font-weight: 700; color: var(--cp-accent); }
+    .report-overview { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px 24px; margin: 20px 0; }
+    .report-overview div { padding: 12px; background: var(--cp-surface-soft); border-radius: .625rem; overflow-wrap: anywhere; }
+    .report-overview strong { display: block; color: var(--cp-text-muted); font-size: 11px; margin-bottom: 4px; }
+    .report-overview span, .report-profiles { font-size: 12px; }
+    .report-profiles { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; margin: 12px 0; color: var(--cp-text-muted); }
+    .report-profiles span { overflow-wrap: anywhere; }
+    .consumption-strip { border-block: 1px solid var(--cp-border); padding: 12px 0; margin: 16px 0; font-size: 13px; overflow-wrap: anywhere; }
+    .consumption-strip p:first-child { color: var(--cp-accent); font-weight: 600; }
+    .report-caveats { font-size: 12px; color: var(--cp-text-muted); margin-top: 16px; }
+    .experiment-strip { display: flex; flex-wrap: wrap; gap: 6px 20px; padding: 10px 0; border-block: 1px solid var(--cp-border); font-size: 13px; font-weight: 600; }
+    .report-facts { display: flex; flex-wrap: wrap; gap: 8px 24px; padding: 10px 0; font-size: 12px; color: var(--cp-text-muted); }
+    .report-facts strong { color: var(--cp-text); font-weight: 600; }
+    .report-facts .usage-fact { color: var(--cp-accent); }
+    .report-footnote { font-size: 11px; color: var(--cp-text-muted); line-height: 1.5; margin-top: 10px; overflow-wrap: anywhere; }
+    .report-actions { margin-top: 12px; }
+    .report-actions button { padding: 7px 12px; font-size: 12px; }
+    #chart-report .section-heading { margin-bottom: 12px; align-items: center; }
+    #chart-report #metric-help { font-size: 12px; max-width: 760px; }
+    #chart-report .chart-row { min-height: 62px; padding: 8px 0; gap: 16px; }
+    #chart-report .tracks { gap: 6px; }
+    #chart-report .bar-container { height: 10px; }
+    #chart-report .model-name { font-size: 13px; }
+    #chart-report .gain { font-size: 14px; }
+    .technical-drawer { padding: 16px 24px; }
+    .technical-drawer .report-overview { margin-bottom: 12px; }
+    #exit-share { position: fixed; top: 8px; right: 12px; z-index: 20; font-size: 12px; padding: 6px 12px; }
+    body[data-share] > header, body[data-share] .benchmark-tabs { display: none; }
+    body[data-share] main { max-width: 1440px; padding: 40px 24px 12px; }
+    body[data-share="token"] #token-panel > :not(#chart-report),
+    body[data-share="tools"] #tools-panel > :not(#tools-report) { display: none; }
+    body[data-share] .report-actions, body[data-share] #tools-report .view-controls,
+    body[data-share] #tools-report > .actions, body[data-share] #tools-export-error,
+    body[data-share] #chart-export-error, body[data-share] #tools-sample-warning { display: none; }
+    body[data-share] #chart-report, body[data-share] #tools-report { margin: 0; }
+    body[data-share] #tools-report .table-wrap { max-height: none; }
+    #tools-report table { table-layout: fixed; font-size: 11px; }
+    #tools-report th, #tools-report td { white-space: normal; overflow-wrap: anywhere; padding: 4px 6px; line-height: 1.25; }
+    #tools-report th:first-child { width: 140px; }
+    #tools-report th:nth-child(2) { width: 130px; }
+    #tools-report th:nth-child(3) { width: 120px; }
+    #tools-report .version { font-size: 10px; line-height: 1.1; }
+    #tools-report .model-name { font-size: 12px; line-height: 1.25; }
+    .view-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin: 16px 0; }
+    .view-controls label { min-width: 220px; }
+    input[type=search] { border: 1px solid var(--cp-border); border-radius: .625rem; background: var(--cp-surface); color: var(--cp-text); padding: 10px 12px; min-width: 0; width: 100%; }
+    .sort-button { border: 0; border-radius: 0; background: var(--cp-surface-soft); padding: 0; text-align: inherit; font: inherit; color: inherit; }
+    .sort-button:hover { color: var(--cp-accent); }
+    #table-body .pair-start td { border-top: 2px solid var(--cp-border-strong); }
+    #table-body .pair-alternate { background: var(--cp-surface-soft); }
+    #table-body tr:hover { background: var(--cp-accent-soft); }
+    .comparison-help { margin-top: 16px; }
+    .benchmark-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+    .benchmark-tabs [aria-selected=true] { background: var(--cp-accent); color: var(--cp-accent-fg); border-color: var(--cp-accent); }
+    #tools-table-body .pair-start td { border-top: 2px solid var(--cp-border-strong); }
+    #tools-table-body .pair-alternate { background: var(--cp-surface-soft); }
+    #tools-cases-preview { padding-left: 24px; font-size: 13px; }
+    #tools-context { overflow-wrap: anywhere; }
+    a { color: var(--cp-link); }
+    :focus-visible { outline: 2px solid var(--cp-accent); outline-offset: 3px; }
+    header { background: var(--cp-surface); border-bottom: 1px solid var(--cp-border); }
+    .header-inner, main { max-width: 1440px; margin: auto; padding: 28px 32px; }
+    .header-inner { display: flex; justify-content: space-between; gap: 20px; align-items: center; }
+    .eyebrow { color: var(--cp-accent); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .12em; }
+    h1 { font-size: clamp(24px, 3vw, 36px); letter-spacing: -.035em; line-height: 1.15; margin: 8px 0; font-weight: 650; }
+    h2 { font-size: 20px; margin: 0; font-weight: 650; letter-spacing: -.02em; }
+    p { margin: 8px 0; }
+    .muted, .subheading, small { color: var(--cp-text-muted); }
+    .badge { display: inline-block; font-size: 12px; padding: 4px 10px; border: 1px solid var(--cp-border); border-radius: .625rem; white-space: nowrap; }
+    .accent { color: var(--cp-accent); background: var(--cp-accent-soft); border-color: var(--cp-highlight); }
+    .toolbar { display: flex; align-items: center; gap: 8px; }
+    .panel, .stat { border: 1px solid var(--cp-border); border-radius: 16px; background: var(--cp-surface); }
+    .panel { padding: 24px; margin-bottom: 20px; }
+    .filters { display: grid; grid-template-columns: minmax(240px, 2fr) repeat(4, minmax(120px, 1fr)); gap: 16px; }
+    label { display: flex; flex-direction: column; gap: 8px; font-size: 12px; font-weight: 600; color: var(--cp-text-muted); }
+    select { width: 100%; min-width: 0; }
+    .filters-bottom { display: flex; justify-content: space-between; align-items: end; gap: 16px; flex-wrap: wrap; margin-top: 20px; }
+    .metric-controls { display: flex; gap: 12px; flex: 1; }
+    .metric-controls label:first-child { width: min(340px, 100%); }
+    .metric-controls label:last-child { min-width: 120px; }
+    .check { flex-direction: row; align-items: center; gap: 8px; font-size: 13px; font-weight: 400; }
+    input[type=checkbox] { accent-color: var(--cp-accent); }
+    .notice { border-left: 3px solid var(--cp-warning); background: var(--cp-bg-elevated); padding: 16px 20px; border-radius: .625rem; margin-bottom: 20px; }
+    .notice strong { display: block; margin-bottom: 4px; }
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin: 20px 0; }
+    .stat { padding: 20px 24px; }
+    .stat-label { color: var(--cp-text-muted); font-size: 13px; }
+    .stat-value { display: block; font-size: 32px; letter-spacing: -.04em; font-weight: 650; margin: 4px 0; }
+    .stat small { font-size: 12px; }
+    .section-heading { display: flex; justify-content: space-between; gap: 16px; align-items: start; margin-bottom: 20px; }
+    .legend { display: flex; gap: 16px; font-size: 12px; color: var(--cp-text-muted); white-space: nowrap; }
+    .legend span { display: flex; gap: 8px; align-items: center; }
+    .swatch { width: 20px; height: 8px; border-radius: 2px; background: var(--cp-border-strong); }
+    .swatch.priority { background: var(--cp-accent); }
+    .chart-row { display: grid; grid-template-columns: 180px minmax(100px, 1fr) 116px; gap: 20px; align-items: center; padding: 16px 0; border-top: 1px solid var(--cp-border); }
+    .model-name { display: block; font-weight: 600; overflow-wrap: anywhere; }
+    .version { color: var(--cp-text-muted); font: 11px/1.5 Consolas, "Courier New", Courier, monospace; }
+    .tracks { display: grid; gap: 8px; min-width: 0; }
+    .track { display: grid; grid-template-columns: 1fr 104px; gap: 12px; align-items: center; }
+    .bar-container { background: var(--cp-surface-soft); height: 12px; border-radius: 3px; overflow: hidden; }
+    .bar { background: var(--cp-border-strong); height: 100%; min-width: 1px; border-radius: 3px; }
+    .bar.priority { background: var(--cp-accent); }
+    .bar-value { font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+    .gain { text-align: right; font-weight: 650; font-variant-numeric: tabular-nums; }
+    .gain small { display: block; font-weight: 400; font-size: 11px; }
+    .positive { color: var(--cp-success); }
+    .negative { color: var(--cp-danger); }
+    .table-wrap { overflow: auto; max-height: 600px; }
+    table { border-collapse: collapse; width: 100%; font-size: 12px; white-space: nowrap; }
+    caption { text-align: left; color: var(--cp-text-muted); padding-bottom: 12px; white-space: normal; }
+    th { text-align: right; font-weight: 600; background: var(--cp-surface-soft); position: sticky; top: 0; }
+    th, td { padding: 12px; border-bottom: 1px solid var(--cp-border); text-align: right; }
+    th:first-child, td:first-child, td:nth-child(2) { text-align: left; }
+    tbody tr:hover { background: var(--cp-accent-soft); }
+    .excluded { color: var(--cp-text-muted); }
+    .status { font-size: 11px; border-radius: 4px; padding: 3px 6px; background: var(--cp-surface-soft); color: var(--cp-text-muted); }
+    .status.valid { background: var(--cp-accent-soft); color: var(--cp-accent); }
+    .empty { color: var(--cp-text-muted); padding: 40px 12px; text-align: center; }
+    .method { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+    .method p, .method dd { font-size: 13px; color: var(--cp-text-muted); }
+    dl { display: grid; grid-template-columns: 150px 1fr; gap: 8px 12px; font-size: 13px; margin: 12px 0 0; }
+    dt { color: var(--cp-text-muted); } dd { margin: 0; overflow-wrap: anywhere; }
+    code { font: 12px/1.5 Consolas, "Courier New", Courier, monospace; }
+    details { margin-top: 20px; border-top: 1px solid var(--cp-border); padding-top: 16px; }
+    summary { cursor: pointer; font-size: 13px; font-weight: 600; }
+    footer { color: var(--cp-text-muted); font-size: 12px; padding: 4px 0 20px; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
+    @media (max-width: 1000px) { .filters { grid-template-columns: repeat(2, 1fr); } .filters label:first-child { grid-column: 1 / -1; } .stats { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 640px) {
+      .header-inner, main { padding: 20px 16px; } .header-inner { align-items: start; }
+      .toolbar { flex-direction: column; align-items: end; } .toolbar .badge { display: none; }
+      .panel { padding: 16px; } .stat { padding: 16px; } .stat-value { font-size: 26px; }
+      .chart-row { grid-template-columns: 1fr 100px; gap: 8px; } .tracks { grid-row: 2; grid-column: 1 / -1; }
+      .gain { grid-column: 2; grid-row: 1; } .section-heading { flex-wrap: wrap; }
+      .method, .live-grid, .report-overview, .report-profiles { grid-template-columns: 1fr; } .metric-controls { flex-wrap: wrap; }
+      dl { grid-template-columns: 110px 1fr; }
+    }
+    @media print {
+      body { background: var(--cp-surface); } .filters-panel, #live-panel, button { display: none; }
+      .table-wrap { max-height: none; overflow: visible; } .panel { break-inside: avoid; }
+      .header-inner, main { max-width: none; padding: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <div>
+        <div class="eyebrow">Azure OpenAI / Performance lab</div>
+        <h1>Latência, lado a lado.</h1>
+        <p class="subheading">Global Standard <span aria-hidden="true">/</span> Standard vs. Priority processing</p>
+      </div>
+      <div class="toolbar">
+        <span id="mode-badge" class="badge accent">Dados reais · offline</span>
+        <button id="theme" type="button" aria-label="Alternar tema claro e escuro">Alternar tema</button>
+      </div>
+    </div>
+  </header>
+  <main>
+    <noscript><div class="notice">Ative JavaScript para visualizar os resultados incorporados neste arquivo.</div></noscript>
+    <div class="benchmark-tabs" role="tablist" aria-label="Tipo de benchmark">
+      <button id="token-tab" type="button" role="tab" aria-selected="true" aria-controls="token-panel">Tokens · latência LLM</button>
+      <button id="tools-tab" type="button" role="tab" aria-selected="false" aria-controls="tools-panel" tabindex="-1">Agente · seleção de tools</button>
+    </div>
+    <div id="token-panel" role="tabpanel" aria-labelledby="token-tab">
+    <section id="live-panel" class="panel" aria-labelledby="live-title">
+      <div class="section-heading">
+        <div><h2 id="live-title">Executar benchmark ao vivo</h2><p id="connection-status" class="muted">Consultando o backend local…</p></div>
+        <span class="badge accent">Perfil de baixa latência</span>
+      </div>
+      <div id="offline-help" class="notice" hidden>
+        O arquivo offline permite apenas visualizar. Para executar, inicie
+        <code>python .\scenarios\model-latency\server.py</code> e abra
+        <a href="http://127.0.0.1:8765/">http://127.0.0.1:8765/</a>.
+        Nenhuma credencial Azure é enviada ao navegador.
+      </div>
+      <fieldset id="live-settings" disabled>
+        <div class="live-grid">
+          <label><span class="slider-heading">Input tokens (total real) <input id="live-input-number" type="number" min="256" max="131072" step="1" value="512" aria-label="Input tokens exatos"></span>
+            <input id="live-input" type="range" min="256" max="131072" step="1" value="512" aria-label="Slider input tokens">
+          </label>
+          <label><span class="slider-heading">Output tokens (cap) <input id="live-output-number" type="number" min="16" max="8192" step="1" value="128" aria-label="Output tokens exatos"></span>
+            <input id="live-output" type="range" min="16" max="8192" step="1" value="128" aria-label="Slider output tokens">
+          </label>
+        </div>
+        <div class="live-extra">
+          <label>Repetições por modelo/tier <input id="live-repetitions" type="number" min="1" max="100" step="1" value="5"></label>
+          <label>Warmups por modelo/tier <input id="live-warmups" type="number" min="0" max="3" step="1" value="1"></label>
+          <label>Intervalo (s) <input id="live-interval" type="number" min="0" max="30" step=".1" value="3"></label>
+          <label>Timeout por chamada (s) <input id="live-timeout" type="number" min="10" max="300" step="1" value="180"></label>
+        </div>
+        <div class="live-extra">
+          <label>Local de execução do runner
+            <select id="live-execution"><option value="local">Local · este computador</option><option value="containerapps" disabled>Azure Container Apps · indisponível</option></select>
+          </label>
+          <label>Processamento
+            <select id="live-tiers"><option value="both">Standard + Priority</option><option value="default">Somente Standard</option><option value="priority">Somente Priority</option></select>
+          </label>
+          <div class="actions"><button id="select-models" type="button">Selecionar todos</button><button id="clear-models" type="button">Limpar seleção</button></div>
+        </div>
+        <div id="live-models" class="model-picker" role="group" aria-label="Modelos para executar"></div>
+        <p id="live-estimate" class="muted"></p>
+        <label class="check"><input id="billing" type="checkbox"> Entendo que iniciar envia chamadas reais e gera cobrança, inclusive calibração/warmup e premium Priority.</label>
+      </fieldset>
+      <div class="actions">
+        <button id="start" type="button" class="primary" disabled>Iniciar benchmark</button>
+        <button id="cancel" type="button" disabled>Cancelar após chamada atual</button>
+        <span id="job-status" role="status" aria-live="polite">Nenhuma execução iniciada neste servidor.</span>
+      </div>
+      <progress id="job-progress" max="1" value="0" aria-label="Progresso das medições"></progress>
+      <p id="job-startup" class="muted"></p>
+      <p id="live-error" class="live-error" role="alert"></p>
+      <details><summary>Parâmetros enviados por modelo · próxima execução</summary>
+        <p class="muted">Reasoning desativado onde suportado; verbosity low nos GPT-5/6. GPT-4.1 não recebe esses campos. Não alteramos parâmetros incompatíveis nem removemos filtros de segurança. Baixa latência não é garantia de ser o modelo mais rápido.</p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Modelo / versão</th><th>reasoning_effort</th><th>verbosity</th><th>stream / usage</th><th>n / store</th><th>temperature / top_p</th><th>tools / logprobs</th></tr></thead>
+          <tbody id="live-parameters"></tbody>
+        </table></div>
+        <p class="muted">Chat Completions v1 · max_completion_tokens = slider de output · service_tier explícito · concorrência 1 · sem retries · prompt sintético sem cache. Calibração usa Standard e cap 16. Campos omitidos usam o padrão do serviço; não representam valores internos de GPU ou filas.</p>
+      </details>
+      <details><summary>Log e última requisição</summary><pre id="live-log" class="live-log">Aguardando execução.</pre></details>
+    </section>
+    <section class="panel filters-panel" aria-label="Filtros de resultados">
+      <div class="filters">
+        <label>Execução <select id="run"></select></label>
+        <label>Input tokens <select id="input"></select></label>
+        <label>Output tokens <select id="output"></select></label>
+        <label>Modelo <select id="model"></select></label>
+        <label>Ordenar modelos · melhor → pior
+          <select id="sort">
+            <option value="priority">Desempenho Priority</option>
+            <option value="standard">Desempenho Standard</option>
+            <option value="gain">Maior ganho Priority</option>
+          </select>
+        </label>
+      </div>
+      <div class="filters-bottom">
+        <div class="metric-controls">
+          <label>Métrica <select id="metric"></select></label>
+          <label>Estatística
+            <select id="stat">
+              <option value="p50">p50 · mediana</option><option value="p90">p90</option>
+              <option value="p95">p95</option><option value="p99">p99</option>
+              <option value="mean">Média</option><option value="min">Mínimo</option>
+              <option value="max">Máximo</option><option value="stddev">Desvio padrão</option>
+              <option value="cv_pct">Coeficiente de variação (%)</option>
+            </select>
+          </label>
+        </div>
+        <label class="check"><input id="excluded" type="checkbox"> Mostrar grupos excluídos na tabela</label>
+        <button id="export" type="button">Exportar CSV filtrado</button>
+      </div>
+      <div class="view-controls">
+        <label>Buscar modelo ou versão <input id="result-search" type="search" placeholder="Ex.: gpt-5.6 ou 2026-07-09" autocomplete="off"></label>
+        <label>Comparações exibidas
+          <select id="pair-filter"><option value="all">Todos os modelos selecionados</option><option value="paired">Somente com Standard e Priority comparáveis</option></select>
+        </label>
+        <button id="clear-result-filters" type="button">Limpar filtros de modelos</button>
+      </div>
+      <p class="muted"><small>Filtros de resultados afetam o gráfico e as tabelas, sem executar novas chamadas.</small></p>
+    </section>
+    <div id="notice" class="notice" role="status" aria-live="polite"></div>
+    <section class="stats" aria-label="Resumo da seleção">
+      <div class="stat"><span class="stat-label">Modelos na seleção</span><strong id="models-count" class="stat-value">—</strong><small>Versões fixadas por execução</small></div>
+      <div class="stat"><span class="stat-label">Medições comparáveis</span><strong id="valid-count" class="stat-value">—</strong><small id="sample-range">Sem warmup ou calibração</small></div>
+      <div class="stat"><span class="stat-label">Excluídas / falhas</span><strong id="excluded-count" class="stat-value">—</strong><small id="error-count">—</small></div>
+      <div class="stat"><span class="stat-label">Pares Standard / Priority</span><strong id="pairs-count" class="stat-value">—</strong><small>Mesmo modelo e input/output</small></div>
+    </section>
+    <section id="chart-report" class="panel" aria-labelledby="chart-title">
+      <div class="section-heading">
+        <div><h2 id="chart-title">Tempo total por modelo</h2><p id="metric-help" class="muted"></p></div>
+        <div class="legend"><span><i class="swatch" aria-hidden="true"></i>Standard</span><span><i class="swatch priority" aria-hidden="true"></i>Priority</span></div>
+      </div>
+      <div id="chart-overview" class="experiment-strip"></div>
+      <div id="chart-usage" class="report-facts"></div>
+      <p id="chart-export-error" class="live-error" role="alert"></p>
+      <div id="chart"></div>
+      <div id="chart-caveats" class="report-footnote"></div>
+      <div class="actions report-actions"><button id="share-chart" type="button">Modo captura · só o relatório</button><button id="export-chart-image" type="button">PNG compacto · gráfico</button><span id="chart-image-status" class="muted" role="status"></span></div>
+    </section>
+    <details id="token-technical" class="panel technical-drawer"><summary>Detalhes técnicos · execução, consumo por fase e parâmetros</summary>
+      <div id="report-overview" class="report-overview"></div>
+      <div id="report-usage" class="consumption-strip"></div>
+      <div id="report-profiles" class="report-profiles"></div>
+      <p class="muted"><small id="chart-note"></small></p>
+      <details class="comparison-help"><summary>Por que Priority pode ter ganho negativo?</summary>
+        <p>Negativo significa que o valor observado foi pior no Priority para a métrica escolhida. O alvo de desempenho Priority não garante vencer Standard em cada chamada nem em todo tempo total medido no cliente.</p>
+        <p>Rede, roteamento global, condições do serviço e variação entre chamadas são hipóteses, não causas comprovadas por este benchmark. Compare TTFT, geração, TPOT/TPS e dispersão; aumente as repetições e repita em horários diferentes. Não há medição isolada da fila interna.</p>
+        <p id="gain-diagnostics" class="muted"></p>
+        <p><a href="https://learn.microsoft.com/azure/foundry/openai/concepts/priority-processing" target="_blank" rel="noopener noreferrer">Documentação Microsoft sobre Priority processing e confirmação de tier</a></p>
+      </details>
+    </details>
+    <section id="results-report" class="panel" aria-labelledby="table-title">
+      <div class="section-heading"><div><h2 id="table-title">Resultados consolidados · Standard vs. Priority</h2><p class="muted">Parâmetros da coleta selecionada, consumo real informado e métricas por modelo/processamento.</p></div><span id="table-count" class="badge"></span></div>
+      <div id="table-overview" class="experiment-strip"></div>
+      <div id="table-usage" class="report-facts"></div>
+      <div class="view-controls">
+        <label>Visão da tabela
+          <select id="table-view">
+            <option value="summary">Consolidado</option><option value="latency">Latências e percentis</option>
+            <option value="throughput">Geração e throughput</option><option value="variability">Dispersão e variabilidade</option>
+            <option value="tokens">Tokens e consumo</option>
+          </select>
+        </label>
+        <label>Ordenar modelos na tabela <select id="table-sort"><option value="chart">Mesma ordem do gráfico</option></select></label>
+        <label>Tier de referência para ordenar
+          <select id="table-reference"><option value="priority">Priority</option><option value="default">Standard</option></select>
+        </label>
+        <label>Direção
+          <select id="table-direction"><option value="asc">Crescente (A → Z / menor → maior)</option><option value="desc">Decrescente (Z → A / maior → menor)</option></select>
+        </label>
+        <button id="export-image" type="button">Exportar resultados em PNG</button>
+        <span id="image-status" class="muted" role="status"></span>
+      </div>
+      <p id="report-export-error" class="live-error" role="alert"></p>
+      <p class="muted"><small>Clique em um cabeçalho para reordenar. Cada modelo permanece em um bloco: Standard, Priority e, se habilitadas, exclusões. A ordenação numérica usa o tier de referência; valores ausentes ficam no final. CSV e PNG mantêm a ordem e os filtros.</small></p>
+      <p class="muted"><small>Processamento = tier confirmado pelo Azure. A comparação usa somente Standard confirmado vs. Priority confirmado, com o mesmo input/output. Um pedido Priority atendido como Standard fica excluído, não vira amostra Standard. Passe sobre o tier para ver o pedido original.</small></p>
+      <div class="table-wrap">
+        <table>
+          <caption id="table-caption"></caption>
+          <thead><tr id="table-head"></tr></thead>
+          <tbody id="table-body"></tbody>
+        </table>
+      </div>
+    </section>
+    <section class="panel" aria-labelledby="run-parameters-title">
+      <h2 id="run-parameters-title">Parâmetros dos modelos nesta execução</h2>
+      <p class="muted">Configuração registrada na coleta selecionada, não os defaults atuais. Parâmetros não registrados ficam identificados.</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Modelo / versão</th><th>reasoning_effort</th><th>verbosity</th><th>Output cap</th><th>Processamento solicitado</th></tr></thead>
+        <tbody id="run-parameters"></tbody>
+      </table></div>
+    </section>
+    <section class="panel method" aria-label="Metodologia e contexto">
+      <div>
+        <h2>O que está sendo comparado</h2>
+        <p>Somente medições sem cache, sem reasoning, com tokens dentro da tolerância configurada e tier retornado igual ao solicitado entram no gráfico. Downgrades, erros e saídas curtas ficam separados.</p>
+        <p>O cap de output não garante a quantidade gerada. Input e output são conferidos contra o <code>usage</code> real. Chunks podem conter vários tokens: TPOT/TPS são aproximações normalizadas, não medições de cada token individual.</p>
+        <p><strong>Global Standard tem roteamento global.</strong> Brazil South é a região do recurso; não garante processamento no Brasil. Tempos do cliente incluem rede. Consultar resultados não gera inferências; o botão Iniciar gera chamadas reais e cobrança.</p>
+        <details><summary>Glossário e limitações</summary>
+          <p>TTFT: até o primeiro texto visível. TTLT: até o último chunk de texto. Total: até o fim do stream, incluindo usage e cauda. TPOT: geração / (tokens visíveis − 1). TPS de geração: inverso normalizado de TPOT.</p>
+          <p>Percentis são interpolados. Com n=1, p50, p95 e p99 são iguais: isso não caracteriza cauda. Desvio padrão precisa de pelo menos duas amostras. Nenhum dado ausente é convertido em zero.</p>
+          <p>CV = desvio padrão amostral / média × 100, definido com n≥2 e média não nula. Mede dispersão relativa, não confiança estatística nem probabilidade de Priority vencer. Percentis de taxas não são inversos dos percentis de latência.</p>
+          <p>Tokens totais = input + completion do usage, incluindo reasoning dentro de completion, sem contá-lo duas vezes. Tokens em cache são parte do input. “*” identifica soma parcial, com usage ausente em parte das chamadas; não é uma estimativa de faturamento.</p>
+          <p>Checkpoints internos são exibidos somente se o servidor os forneceu no stream. Valores ausentes ficam como “N/D”. Calibração e warmup não entram nos agregados de latência.</p>
+        </details>
+      </div>
+      <div><h2>Contexto da execução</h2><dl id="context"></dl></div>
+    </section>
+    <footer id="footer"></footer>
+    </div>
+    <div id="tools-panel" role="tabpanel" aria-labelledby="tools-tab" hidden>
+      <section class="panel" aria-labelledby="tools-title">
+        <div class="section-heading"><div><h2 id="tools-title">Agente · seleção de tools</h2><p class="muted">LLM com function call nativo vs. Microsoft-Decision-1 via adaptador de escolha.</p></div><span class="badge accent">tool-routing-v1</span></div>
+        <p id="tools-connection" class="notice" role="status">Modo offline · resultados salvos disponíveis; iniciar exige o backend local.</p>
+        <fieldset id="tools-settings" disabled>
+          <label>Local de execução do runner
+            <select id="tools-execution"><option value="local">Local · este computador</option><option value="containerapps" disabled>Azure Container Apps · indisponível</option></select>
+          </label>
+          <div id="tools-models" class="model-picker" role="group" aria-label="Modelos do agente"></div>
+          <div class="model-picker" role="group" aria-label="Tiers dos LLMs">
+            <label class="check"><input id="tools-standard" type="checkbox" checked>LLM Standard</label>
+            <label class="check"><input id="tools-priority" type="checkbox" checked>LLM Priority</label>
+          </div>
+          <p class="muted">Decision executa uma única vez por caso/repetição: API Decision · Global Standard (sem Priority).</p>
+          <div class="live-extra">
+            <label>Casos balanceados <select id="tools-cases"><option>3</option><option selected>6</option><option>9</option><option>12</option></select></label>
+            <label>Repetições por caso <input id="tools-repetitions" type="number" min="1" max="50" value="3" required></label>
+            <label>Warmups por modelo/processamento <input id="tools-warmups" type="number" min="0" max="3" value="1" required></label>
+            <label>Intervalo (s) <input id="tools-interval" type="number" min="0" max="30" step=".1" value="1" required></label>
+            <label>Timeout (s) <input id="tools-timeout" type="number" min="10" max="300" value="60" required></label>
+          </div>
+          <label><span class="slider-heading">Padding local aproximado · o200k_base <input id="tools-padding-number" type="number" min="0" max="16384" step="1" value="0" required aria-label="Padding aproximado em tokens"></span>
+            <input id="tools-padding" type="range" min="0" max="16384" step="1" value="0" aria-label="Slider padding aproximado">
+          </label>
+          <p class="muted">Mesmo padding nos dois provedores; não equivale a input faturado idêntico. O consumo real e a cobertura de usage aparecem nos resultados.</p>
+          <p id="tools-estimate" class="muted"></p>
+          <label class="check"><input id="tools-billing" type="checkbox">Entendo que iniciar gera chamadas reais e cobrança, incluindo warmups e premium Priority.</label>
+        </fieldset>
+        <div class="actions"><button id="tools-start" type="button" class="primary" disabled>Iniciar agente benchmark</button><button id="tools-cancel" type="button" disabled>Cancelar agente após chamada atual</button><span id="tools-job-status" role="status" aria-live="polite">Nenhuma execução iniciada.</span></div>
+        <progress id="tools-progress" max="1" value="0" aria-label="Progresso do agente"></progress>
+        <p id="tools-job-startup" class="muted"></p>
+        <p id="tools-error" class="live-error" role="alert"></p>
+        <details><summary>Parâmetros enviados · próxima execução</summary><div id="tools-parameters" class="table-wrap"></div>
+          <p class="muted">LLM: output cap 128, n=1, stream=false, parallel_tool_calls=false, tool_choice=required; temperature omitida. Reasoning none e verbosity low somente quando suportados. Decision: adaptador de escolha, não function calling nativo, nem geração livre ou Priority. Todos recebem as mesmas três tools sem argumentos ({}); não há comparação de extração de argumentos.</p>
+        </details>
+        <details><summary>Tools fixas e casos balanceados</summary><ul id="tools-catalog"></ul><ol id="tools-cases-preview"></ol></details>
+        <details><summary>Log do agente</summary><pre id="tools-log" class="live-log">Aguardando execução.</pre></details>
+      </section>
+      <section id="tools-report" class="panel" aria-labelledby="tools-results-title">
+        <h2 id="tools-results-title">Resultados consolidados · escolha correta antes da velocidade</h2>
+        <div class="view-controls">
+          <label>Execução do agente <select id="tools-run"></select></label>
+          <label>Buscar modelo ou versão <input id="tools-search" type="search" autocomplete="off"></label>
+          <label>Ordenar blocos de modelo <select id="tools-sort"><option value="accuracy">Acurácia e seleção p50</option><option value="selection_ms_p50">Seleção p50</option><option value="selection_ms_p95">Seleção p95</option><option value="agent_total_ms_p50">Agente total p50</option></select></label>
+          <label>Direção <select id="tools-direction"><option value="auto">Padrão da métrica</option><option value="asc">Crescente</option><option value="desc">Decrescente</option></select></label>
+          <label>Visão <select id="tools-view"><option value="summary">Consolidado</option><option value="latency">Seleção · percentis e dispersão</option><option value="tokens">Tokens e cobertura de usage</option></select></label>
+        </div>
+        <div id="tools-overview" class="experiment-strip"></div>
+        <div id="tools-brief" class="report-facts"></div>
+        <div id="tools-caveats" class="report-footnote"></div>
+        <p id="tools-sample-warning" class="report-footnote">Amostras pequenas: cauda não conclusiva; desvio/CV requerem n≥2.</p>
+        <div class="actions report-actions"><button id="share-tools" type="button">Modo captura · só o relatório</button><button id="tools-export" type="button" disabled>CSV consolidado</button><button id="tools-export-raw" type="button" disabled>CSV requisições filtradas</button><button id="tools-export-image" type="button" disabled>PNG compacto · tabela</button></div>
+        <p id="tools-export-error" class="live-error" role="alert"></p>
+        <div class="table-wrap"><table id="tools-table"><caption>Tempos em ms · role a tabela para ver todas as colunas</caption><thead><tr id="tools-table-head"></tr></thead><tbody id="tools-table-body"></tbody></table></div>
+      </section>
+      <details id="tools-technical" class="panel technical-drawer"><summary>Detalhes técnicos · execução, consumo por fase e casos</summary>
+        <div id="tools-context" class="report-overview"></div>
+        <div id="tools-usage" class="consumption-strip"></div>
+        <div id="tools-profiles" class="report-profiles"></div>
+        <p class="muted"><small>Acurácia inclui todos os attempts medidos, inclusive erros. Latências somente de chamadas corretas comparáveis, sem cache/reasoning conhecidos e com tier LLM confirmado igual ao solicitado. Sem exigência de tokens de saída iguais. Blocos ordenados pelo Standard (ou Priority se Standard ausente); Standard sempre antes de Priority. Decision é um bloco separado, sem duplicação por tier. N/D nunca é zero.</small></p>
+        <pre id="tools-run-details" class="live-log"></pre>
+      </details>
+      <section class="panel" aria-labelledby="tools-raw-title">
+        <h2 id="tools-raw-title">Requisições medidas · por caso</h2>
+        <div class="view-controls">
+          <label>Resultado <select id="tools-raw-status"><option value="all">Todos</option><option value="success">Corretas comparáveis</option><option value="incorrect">Incorretas</option><option value="error">Erros</option><option value="excluded">Excluídas</option></select></label>
+          <label>Modelo <select id="tools-raw-model"></select></label><label>Caso <select id="tools-raw-case"></select></label>
+          <label>Ordem das requisições <select id="tools-raw-sort"><option value="original">Ordem registrada</option><option value="selection_ms">Seleção crescente</option><option value="case_id">Caso</option></select></label>
+        </div>
+        <div class="table-wrap"><table><caption>Warmups não entram nesta tabela. Passe sobre o processamento para ver tier solicitado/retornado.</caption><thead><tr id="tools-raw-head"></tr></thead><tbody id="tools-raw-body"></tbody></table></div>
+      </section>
+      <section class="panel method" aria-label="Metodologia do agente">
+        <div><h2>O que medimos</h2><p>Mesmo input semântico e mesmas três tools locais determinísticas, allowlisted, seguras e sem argumentos. O agente seleciona e despacha uma tool, sem segunda resposta LLM ou geração de resposta final.</p><p>Não streaming: seleção mede até a escolha válida COMPLETA estar disponível, não TTFT. Rede do cliente está incluída; headers são um proxy HTTP, não fila interna. Dispatch local é medido separadamente; agente total inclui seleção e dispatch.</p></div>
+        <div><h2>Limites da comparação</h2><p>Sem overhead de agente gerenciado do Foundry. Function call nativo nos LLMs vs. adaptador de escolha Decision são interfaces diferentes. Global Standard é globalmente roteado: região do recurso não garante processamento no Brasil.</p><p>Decision não oferece Priority aqui; Global Standard é a modalidade configurada, não um tier Standard verificado na resposta. Tokens usam usage real; valores ausentes ficam N/D, e somas parciais indicam quantas chamadas reportaram usage. Não são estimativas de faturamento.</p></div>
+      </section>
+    </div>
+  </main>
+  <button id="exit-share" type="button" hidden>Sair do modo captura · Esc</button>
+  <script id="benchmark-data" type="application/json">__BENCHMARK_DATA__</script>
+  <script>
+    "use strict";
+    const DATA = JSON.parse(document.getElementById("benchmark-data").textContent);
+    if (!DATA.runs.length) DATA.runs.push({
+      id:"sem-execucoes",summary:[],phases:{},models:[],completed:false
+    });
+    const METRICS = {
+      total_ms: ["Tempo total", "ms", "Menor é melhor. Inclui envio, rede, inferência e consumo completo do stream."],
+      ttft_ms: ["TTFT · primeiro texto", "ms", "Menor é melhor. Ignora eventos vazios, roles e metadados."],
+      last_token_ms: ["TTLT · último texto", "ms", "Menor é melhor. Tempo até o último chunk de texto visível."],
+      generation_ms: ["Janela de geração", "ms", "Último menos primeiro chunk de texto; menor é melhor para o mesmo output."],
+      tpot_ms: ["TPOT · tempo por token", "ms", "Aproximação: tempo de geração / (tokens visíveis − 1). Menor é melhor."],
+      generation_tokens_per_s: ["Tokens/s · geração", "tok/s", "Maior é melhor. Aproximação normalizada, não throughput máximo do deployment."],
+      end_to_end_tokens_per_s: ["Tokens/s · ponta a ponta", "tok/s", "Maior é melhor. Output visível dividido pelo tempo total."],
+      headers_ms: ["Recebimento dos headers", "ms", "Proxy de TTFB HTTP; não é uma medição do primeiro byte TCP."],
+      first_sse_ms: ["Primeiro evento SSE", "ms", "Pode conter somente metadados, sem texto visível."],
+      stream_tail_ms: ["Cauda do stream", "ms", "Tempo entre o último texto e o fim da requisição."],
+      chunk_gap_p50_ms: ["Intervalo entre chunks · p50", "ms", "p50 por requisição; a estatística selecionada agrega esses valores. Não é ITL por token."],
+      chunk_gap_p95_ms: ["Intervalo entre chunks · p95", "ms", "p95 por requisição; a estatística selecionada agrega esses valores. Não é ITL por token."],
+      chunk_gap_max_ms: ["Maior intervalo entre chunks", "ms", "Máximo por requisição. Chunks podem conter vários tokens."],
+      server_pre_inference_ms: ["Servidor · pré-inferência", "ms", "Checkpoint informado pelo servidor, quando disponível. Não equivale a fila pura."],
+      server_engine_ttft_ms: ["Servidor · engine TTFT", "ms", "Checkpoint de primeiro token do engine, somente quando informado no stream."],
+      server_engine_ttlt_ms: ["Servidor · engine TTLT", "ms", "Checkpoint de último token do engine, somente quando informado no stream."],
+      server_engine_tbt_ms: ["Servidor · engine TBT", "ms", "Intervalo entre tokens reportado pelo engine, quando disponível."],
+      server_service_ttft_ms: ["Servidor · serviço TTFT", "ms", "Checkpoint de primeiro token do serviço, quando disponível."],
+      server_service_ttlt_ms: ["Servidor · serviço TTLT", "ms", "Checkpoint de último token do serviço, quando disponível."],
+      server_service_tbt_ms: ["Servidor · serviço TBT", "ms", "Intervalo entre tokens reportado pelo serviço, quando disponível."],
+      server_user_visible_ttft_ms: ["Servidor · TTFT visível", "ms", "Tempo visível reportado pelo servidor, não substitui o relógio do cliente."]
+    };
+    const REASONS = {
+      request_error: "Erro na requisição", tier_mismatch_or_missing: "Tier divergente ou ausente",
+      input_tokens_mismatch: "Input diferente do alvo", output_tokens_mismatch: "Output diferente do alvo",
+      cache_usage_unknown: "Cache desconhecido", cached_input: "Input em cache",
+      reasoning_usage_unknown: "Reasoning desconhecido", reasoning_output: "Output com reasoning"
+    };
+    const $ = id => document.getElementById(id);
+    const fmt = value => Number.isFinite(value) ? value.toLocaleString("pt-BR", {maximumFractionDigits: 2}) : "N/D";
+    const integer = value => value.toLocaleString("pt-BR");
+    const tierLabel = tier => ({default: "Standard", priority: "Priority"}[tier] || tier || "Ausente");
+    const node = (tag, text, className) => {
+      const element = document.createElement(tag);
+      if (text !== undefined) element.textContent = text;
+      if (className) element.className = className;
+      return element;
+    };
+    const known = value => value === undefined || value === null ? "N/D" : String(value);
+    const dateText = value => value ? new Date(value).toLocaleString("pt-BR") : "N/D";
+    function configureExecution(bootstrap) {
+      const targets=bootstrap.execution_targets || [{id:"local",label:"Local · este computador",available:true}];
+      for (const id of ["live-execution","tools-execution"]) {
+        const select=$(id);
+        select.replaceChildren(...["local","containerapps"].map(id => {
+          const target=targets.find(item => item.id===id);
+          const option=node("option",target?.label || (id==="local" ? "Local · este computador" : "Azure Container Apps · indisponível"));
+          option.value=id; option.disabled=!target?.available;
+          return option;
+        }));
+        const preferred=bootstrap.default_execution || "local";
+        select.value=[...select.options].some(option => option.value===preferred && !option.disabled) ? preferred : "local";
+      }
+    }
+    function executionLabel(id) {
+      return $(id).selectedOptions[0]?.textContent || "Local · este computador";
+    }
+    function startupText(job) {
+      const execution=job.execution || job.run?.execution || {};
+      if ((execution.target || job.execution_target || job.settings?.execution_target)!=="containerapps") return "";
+      const seconds=job.startup_duration_s ?? job.startup_s ?? execution.startup_duration_s;
+      return `Inicialização / orquestração do job: ${Number.isFinite(seconds) ? fmt(seconds)+" s" : job.state==="starting" ? "aguardando runner" : "não registrada"}. `+
+        "Cold start separado das latências de requisição; warmups antecedem a medição. Job efêmero, sem serviço sempre ligado.";
+    }
+    function executionMeta(run) {
+      const e=run.execution || {}, target=e.target;
+      const label=target==="containerapps" ? (e.label || "Azure Container Apps") :
+        target==="local" ? (e.label || "Local · este computador") : "Não registrado";
+      return [
+        ["Runner",label],
+        ["Região do runner",e.region || "Não registrado"],
+        ["Infraestrutura do runner",`CPU ${known(e.cpu)}; memória ${e.memory || "N/D"}; paralelismo ${known(e.parallelism)}; retries ${known(e.replica_retry_limit)}`],
+        ["Identidade / execução do runner",`${e.authentication || "Não registrado"}; run ${e.run_id || "Não registrado"}; execução/revisão ${e.revision_or_execution || "Não registrado"}`],
+        ["Recurso do runner",e.resource_id || "Não registrado"],
+        ["Imagem do runner",e.image || "Não registrado"],
+      ];
+    }
+    function runMeta(run) {
+      const settings=run.settings || {};
+      return [
+        ["Execução",run.id+" · "+(run.cancelled ? "Cancelada / parcial" : run.completed ? "Concluída" : "Parcial / em andamento")],
+        ["Horário",dateText(run.started)+" → "+dateText(run.ended)],
+        ["Recurso / projeto",(run.account || "N/D")+" / "+(run.project || "N/D")],
+        ["Região do recurso do modelo",run.location || "Não registrado"],
+        ...executionMeta(run),
+        ["Coleta",`Repetições ${known(settings.repetitions)} / perfil; warmups ${known(settings.warmups)} / perfil; medição ${known(run.measured ?? run.phases?.measure?.requests)}/${known(run.expected)}`],
+        ["Controle",`Concorrência ${known(run.concurrency)}; intervalo ${known(run.interval ?? settings.interval)} s; timeout ${known(settings.timeout)} s; seed ${known(settings.seed)}`],
+        ["Duração da execução",Number.isFinite(run.duration_s) ? fmt(run.duration_s)+" s (inclui preparação e esperas; não é latência do modelo)" : "Em andamento ou não registrada"],
+        ["Inicialização do job",startupText({execution:run.execution, startup_duration_s:run.startup_duration_s}) || "N/A ou não registrada; não integra a latência de requisição"],
+      ];
+    }
+    const tokenFields=["prompt_tokens","completion_tokens","total_tokens","cached_tokens","reasoning_tokens"];
+    function sumUsage(rows) {
+      const sum=field => rows.every(row => Number.isFinite(row[field])) ? rows.reduce((total,row) => total+row[field],0) : null;
+      const totals={requests:sum("attempts"),errors:sum("errors")};
+      for (const field of tokenFields) {
+        const present=rows.filter(row => Number.isFinite(row[field+"_sum"]) && row[field+"_reported"]>0);
+        totals[field+"_sum"]=present.length ? present.reduce((sum,row) => sum+row[field+"_sum"],0) : null;
+        totals[field+"_reported"]=sum(field+"_reported");
+      }
+      return totals;
+    }
+    function usageLine(label,totals) {
+      const tokens=(field,name) => `${name} ${tokenText(totals,field,totals?.requests)} [usage ${known(totals?.[field+"_reported"])}/${known(totals?.requests)}]`;
+      return `${label}: ${known(totals?.requests)} chamadas; ${known(totals?.errors)} erros; `+
+        [tokens("prompt_tokens","input"),tokens("completion_tokens","completion"),tokens("total_tokens","total")].join("; ")+" tokens. "+
+        `Cache (parte do input) ${tokenText(totals,"cached_tokens",totals?.requests)}; reasoning (parte do output) ${tokenText(totals,"reasoning_tokens",totals?.requests)}.`;
+    }
+    function usageLines(run,selected,phases) {
+      return [
+        usageLine("Execução inteira (todos os modelos/tokens/fases)",run.usage?.all),
+        usageLine("Medição selecionada (inclui excluídas; independente de ocultar exclusões)",selected),
+        ...phases.map(phase => usageLine(({calibrate:"Calibração",warmup:"Warmup",measure:"Medição"}[phase])+" · execução inteira",run.usage?.phases?.[phase])),
+      ];
+    }
+    const reportCaveats=[
+      "Tokens = usage real; total = input + completion, sem duplicar cache ou reasoning. Cobertura n/N; N/D não é zero; soma parcial não é fatura.",
+      "Global Standard tem roteamento global: a região do recurso do modelo não garante a região de inferência; a região do runner é independente.",
+      "Cold start/orquestração do job e warmups não entram nas latências medidas. Rede incluída; n pequeno não caracteriza cauda. Ganho negativo não prova causa.",
+    ];
+    function renderReportContext(prefix,report) {
+      $(prefix==="tools-" ? "tools-context" : prefix+"overview").replaceChildren(...report.meta.map(([label,value]) => {
+        const entry=node("div"); entry.append(node("strong",label),node("span",value));return entry;
+      }));
+      $(prefix+"usage").replaceChildren(...report.usageLines.map(line => node("p",line)));
+      $(prefix+"profiles").replaceChildren(...report.profiles.map(line => node("span",line)));
+    }
+    function compactContext(run,selected,{experiment,quality,filter,tool=false}) {
+      const settings=run.settings || {}, e=run.execution || {};
+      const runner=e.target==="containerapps" ? "Azure Container Apps" : e.target==="local" ? "Local" : "Executor não registrado";
+      const controls=[Number.isFinite(settings.repetitions) ? `${fmt(settings.repetitions)} repetições` : null,
+        Number.isFinite(settings.warmups) ? `${fmt(settings.warmups)} warmup` : null,
+        Number.isFinite(run.concurrency) ? `concorrência ${fmt(run.concurrency)}` : null].filter(Boolean).join(" · ");
+      const tokens=`Tokens medidos: ${tokenText(selected,"total_tokens",selected.requests)} · usage ${known(selected.total_tokens_reported)}/${known(selected.requests)}`;
+      const state=run.cancelled ? "cancelada/parcial" : run.completed ? "concluída" : "parcial";
+      const id=run.id.length>36 ? run.id.slice(0,16)+"…"+run.id.slice(-15) : run.id;
+      return {
+        strip:[experiment,controls,runner+(e.region ? " · "+e.region : ""),run.location ? "Recurso modelo · "+run.location : null].filter(Boolean),
+        facts:[quality,tokens,`${dateText(run.started)} · ${id} · ${state}`],
+        footer:[
+          filter,
+          tool ? "Latências: corretas comparáveis; acurácia: todas as tentativas. LLM function call vs adaptador Decision, sem Priority no Decision." :
+            "Tier confirmado · sem cache/reasoning · ganho positivo favorece Priority. n pequeno: cauda não conclusiva.",
+          "Tokens: seleção medida, inclui excluídas; total = input + completion. Cold start/warmup fora da latência. Global Standard: roteamento global.",
+        ],
+      };
+    }
+    function renderBrief(overview,facts,brief) {
+      $(overview).replaceChildren(...brief.strip.map(text => node("span",text)));
+      $(facts).replaceChildren(...brief.facts.map((text,index) => node("strong",text,index===1 ? "usage-fact" : "")));
+    }
+    function shareReport(tab) {
+      document.body.dataset.share=tab;
+      $("exit-share").hidden=false;
+      window.scrollTo(0,0);
+    }
+    function exitShare() {
+      delete document.body.dataset.share;
+      $("exit-share").hidden=true;
+    }
+    let apiToken = null, connected = false, jobBusy = false, followedJob = null, settledJob = null;
+    const activeStates = new Set(["starting","running","stopping"]);
+    function modelParameters(target, models, historical=false) {
+      target.replaceChildren();
+      for (const model of models) {
+        const row = node("tr");
+        const label = node("td");
+        label.append(node("span",model.name,"model-name"),node("span",model.version,"version"));
+        row.append(label);
+        const reason = model.reasoning_effort === null ? "N/A · omitido" : model.reasoning_effort ?? "Não registrado";
+        const verbosity = model.verbosity ?? (model.name === "gpt-4.1" ? "N/A · omitido" : "Omitido · padrão do serviço");
+        const fields = historical ? [reason,verbosity,$("output").value || "N/D","Standard / Priority via service_tier"] :
+          [reason,verbosity,"true / include_usage=true","1 / false","Omitidos · padrão do serviço","Ausentes / omitido"];
+        for (const value of fields) row.append(node("td",String(value)));
+        target.append(row);
+      }
+    }
+    function liveSettings() {
+      return {
+        input_tokens: Number($("live-input-number").value), output_tokens: Number($("live-output-number").value),
+        repetitions: Number($("live-repetitions").value), warmups: Number($("live-warmups").value),
+        interval: Number($("live-interval").value), timeout: Number($("live-timeout").value),
+        execution_target: $("live-execution").value,
+        models: [...$("live-models").querySelectorAll("input:checked")].map(input => input.value),
+        tiers: $("live-tiers").value === "both" ? ["default","priority"] : [$("live-tiers").value],
+        confirm_billing: $("billing").checked
+      };
+    }
+    function updateEstimate() {
+      const settings = liveSettings();
+      const cells = settings.models.length * settings.tiers.length;
+      const measured = cells * settings.repetitions, warmups = cells * settings.warmups;
+      const calibration = settings.models.length * 4;
+      $("live-estimate").textContent = `Runner: ${executionLabel("live-execution")}. ${integer(measured)} medições + ${integer(warmups)} warmups + até ${integer(calibration)} calibrações. ` +
+        `Até ${integer((measured+warmups)*settings.input_tokens + calibration*settings.input_tokens)} tokens de input e ` +
+        `${integer((measured+warmups)*settings.output_tokens+calibration*16)} tokens de output (caps, incluindo calibração).`;
+      const invalid = [...$("live-settings").querySelectorAll("input[type=number]")].some(input => !input.checkValidity());
+      $("start").disabled = !connected || jobBusy || !settings.confirm_billing || !settings.models.length || invalid;
+    }
+    async function api(path, body) {
+      const options = body === undefined ? {cache:"no-store"} : {
+        method:"POST", headers:{"Content-Type":"application/json","X-Benchmark-Token":apiToken},
+        body:JSON.stringify(body)
+      };
+      const response = await fetch(path, options);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+      return data;
+    }
+    function updateRunOptions(preferred) {
+      options($("run"), DATA.runs.map(run => {
+        const models = new Set(run.summary.filter(row => row.comparable).map(row => row.model)).size;
+        const label = run.cancelled ? "cancelada" : run.completed ? "concluída" : "parcial / diagnóstico";
+        return [run.id, `${run.id} · ${models} modelos · ${label}`];
+      }), preferred);
+    }
+    function applyJob(job) {
+      if (!job) return;
+      const signature=job.id+":"+job.state;
+      if (!activeStates.has(job.state) && settledJob===signature) return;
+      jobBusy = activeStates.has(job.state);
+      $("live-settings").disabled = !connected || jobBusy;
+      $("cancel").disabled = !connected || !jobBusy || job.state === "stopping";
+      const statuses = {
+        starting:"Preparando",running:"Executando",stopping:"Cancelamento solicitado; aguardando a chamada atual",
+        cancelled:"Cancelado; resultados parciais preservados",completed:"Concluído",
+        completed_with_exclusions:"Concluído com exclusões",failed:"Falhou; resultados parciais preservados"
+      };
+      const phases = Object.entries(job.phases).map(([name,value]) => `${name}: ${value.requests}`).join(" · ");
+      $("job-status").textContent = `${statuses[job.state] || job.state} · medições ${job.measured}/${job.expected}` + (phases ? ` · ${phases}` : "");
+      $("job-progress").max = job.expected || 1;
+      $("job-progress").value = job.measured;
+      $("job-startup").textContent=startupText(job);
+      $("live-log").textContent = (job.log.join("\n") || "Preparando processo e credenciais Entra…") +
+        (job.last_request ? "\n\nÚltima requisição (sem prompt/credenciais):\n"+JSON.stringify(job.last_request,null,2) : "");
+      if (job.error) $("live-error").textContent = job.error;
+      const index = DATA.runs.findIndex(run => run.id === job.run.id);
+      if (index >= 0) DATA.runs[index] = job.run; else DATA.runs.push(job.run);
+      const selected = $("run").value;
+      const follow = followedJob === job.id && (!lastJobSelected || lastJobSelected === selected);
+      updateRunOptions(follow ? job.run.id : selected);
+      if (follow) lastJobSelected = job.run.id;
+      resetInputs();
+      updateEstimate();
+      if (!jobBusy) settledJob=signature;
+    }
+    let lastJobSelected = null;
+    async function pollJob() {
+      try {
+        const data = await api("/api/state");
+        connected = true;
+        $("connection-status").textContent = "Backend local conectado · autenticação Entra somente no servidor · resultados atualizados após cada chamada.";
+        if (data.job && followedJob === null && activeStates.has(data.job.state)) {
+          followedJob = data.job.id; lastJobSelected = null;
+        }
+        applyJob(data.job);
+        jobBusy = data.busy ?? jobBusy;
+        if (!data.job || !activeStates.has(data.job.state)) $("cancel").disabled=true;
+        $("live-settings").disabled = jobBusy;
+        updateEstimate();
+      } catch (error) {
+        connected = false; $("live-settings").disabled = true;
+        $("start").disabled = true; $("cancel").disabled = true;
+        $("live-error").textContent = `Conexão local interrompida: ${error.message}. Isso não cancela uma execução já iniciada.`;
+      } finally {
+        window.setTimeout(pollJob, connected ? 1000 : 3000);
+      }
+    }
+    async function connectLive() {
+      for (const name of ["input","output"]) {
+        const slider = $("live-"+name), number = $("live-"+name+"-number");
+        slider.addEventListener("input",() => { number.value=slider.value; updateEstimate(); });
+        number.addEventListener("input",() => { slider.value=number.value; updateEstimate(); });
+      }
+      const models = DATA.models || [];
+      for (const model of models) {
+        const label = node("label",undefined,"check"), checkbox = node("input");
+        checkbox.type="checkbox"; checkbox.value=model.name; checkbox.checked=true;
+        label.append(checkbox,node("span",model.name)); $("live-models").append(label);
+      }
+      modelParameters($("live-parameters"),models);
+      $("live-settings").addEventListener("change",updateEstimate);
+      for (const input of $("live-settings").querySelectorAll("input[type=number]")) {
+        input.required=true; input.addEventListener("input",updateEstimate);
+      }
+      for (const [id,checked] of [["select-models",true],["clear-models",false]]) $(id).addEventListener("click",() => {
+        for (const input of $("live-models").querySelectorAll("input")) input.checked=checked;
+        updateEstimate();
+      });
+      updateEstimate();
+      if (location.protocol !== "http:" || location.hostname !== "127.0.0.1") {
+        $("connection-status").textContent = "Modo offline · execução desabilitada.";
+        $("offline-help").hidden = false;
+        return;
+      }
+      try {
+        const bootstrap = await api("/api/bootstrap");
+        apiToken=bootstrap.csrf_token; connected=true;
+        configureExecution(bootstrap);
+        toolsConnect(bootstrap);
+        $("mode-badge").textContent="Controle local · runner selecionável";
+        $("live-settings").disabled=false;
+        $("start").addEventListener("click",async() => {
+          $("start").disabled=true; $("live-error").textContent="";
+          try {
+            const settings = liveSettings();
+            const job = await api("/api/start",settings);
+            followedJob=job.id; lastJobSelected=null; jobBusy=true;
+            $("billing").checked=false;
+            $("live-settings").disabled=true;
+            $("job-status").textContent="Preparando benchmark…";
+            if (settings.tiers.length===1) $("sort").value=settings.tiers[0]==="default" ? "standard" : "priority";
+            const state = await api("/api/state"); applyJob(state.job);
+          } catch (error) { $("live-error").textContent=error.message; updateEstimate(); }
+        });
+        $("cancel").addEventListener("click",async() => {
+          $("cancel").disabled=true;
+          try {
+            await api("/api/cancel",{});
+            $("job-status").textContent="Cancelamento solicitado; aguardando a chamada atual. Chamadas já enviadas podem ser cobradas.";
+          } catch (error) { $("live-error").textContent=error.message; $("cancel").disabled=!jobBusy; }
+        });
+        pollJob();
+      } catch (error) {
+        $("live-error").textContent=`Backend indisponível: ${error.message}`;
+        $("offline-help").hidden=false;
+        $("tools-connection").textContent=`Backend indisponível: ${error.message}. Resultados salvos disponíveis; iniciar desabilitado.`;
+      }
+    }
+    function options(select, entries, preferred) {
+      select.replaceChildren(...entries.map(([value, label]) => {
+        const option = node("option", label);
+        option.value = value;
+        return option;
+      }));
+      if (entries.some(([value]) => String(value) === String(preferred))) select.value = preferred;
+    }
+    function currentRun() { return DATA.runs.find(run => run.id === $("run").value); }
+    function resetInputs() {
+      const run = currentRun();
+      const values = [...new Set(run.summary.map(row => row.input_target))].sort((a,b) => a-b);
+      if (!values.length && run.input_target) values.push(run.input_target);
+      options($("input"), values.map(value => [value, integer(value)]), $("input").value);
+      resetOutputs();
+    }
+    function resetOutputs() {
+      const rows = currentRun().summary.filter(row => row.input_target === Number($("input").value));
+      const values = [...new Set(rows.map(row => row.output_target))].sort((a,b) => a-b);
+      if (!values.length && currentRun().output_target) values.push(currentRun().output_target);
+      options($("output"), values.map(value => [value, integer(value)]), $("output").value);
+      resetModels();
+    }
+    function resetModels() {
+      const rows = currentRun().summary.filter(row =>
+        row.input_target === Number($("input").value) && row.output_target === Number($("output").value));
+      const models = [...new Set(rows.map(row => row.model))].sort();
+      options($("model"), [["all", "Todos os modelos"], ...models.map(name => [name, name])], $("model").value);
+      render();
+    }
+    function selectedRows() {
+      const terms=$("result-search").value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+      const rows=currentRun().summary.filter(row =>
+        row.input_target === Number($("input").value) &&
+        row.output_target === Number($("output").value) &&
+        ($("model").value === "all" || row.model === $("model").value) &&
+        terms.every(term => `${row.model} ${row.version}`.toLowerCase().includes(term)));
+      if ($("pair-filter").value !== "paired") return rows;
+      const paired=new Set(pairsFor(rows).filter(pair => pair.default && pair.priority).map(modelKey));
+      return rows.filter(row => paired.has(modelKey(row)));
+    }
+    const modelKey = row => JSON.stringify([row.model ?? row.name,row.version]);
+    function isHigherBetter() {
+      return $("metric").value.endsWith("tokens_per_s") && !["stddev","cv_pct"].includes($("stat").value);
+    }
+    const metricUnit = () => $("stat").value === "cv_pct" ? "%" : METRICS[$("metric").value][1];
+    function comparisonValue(pair, tier) {
+      const row = pair[tier];
+      const value = row?.[$("metric").value + "_" + $("stat").value];
+      return Number.isFinite(value) ? value : null;
+    }
+    function gain(pair) {
+      const standard = comparisonValue(pair, "default"), priority = comparisonValue(pair, "priority");
+      if (standard === null || priority === null || standard <= 0) return null;
+      return 100 * (isHigherBetter() ? priority - standard : standard - priority) / standard;
+    }
+    function pairsFor(rows) {
+      const pairs = new Map();
+      for (const row of rows.filter(row => row.comparable && ["default", "priority"].includes(row.actual_tier))) {
+        const key = modelKey(row);
+        if (!pairs.has(key)) pairs.set(key, {model: row.model, version: row.version});
+        pairs.get(key)[row.actual_tier] = row;
+      }
+      return [...pairs.values()];
+    }
+    function compareNumbers(a,b,descending=false) {
+      if (Number.isFinite(a)!==Number.isFinite(b)) return Number.isFinite(a) ? -1 : 1;
+      return Number.isFinite(a) && Number.isFinite(b) ? (descending ? b-a : a-b) : 0;
+    }
+    function compareChartPairs(a,b) {
+      const key = $("sort").value;
+      const tier = key === "standard" ? "default" : "priority";
+      const difference = key === "gain" ? compareNumbers(gain(a),gain(b),true) :
+        compareNumbers(comparisonValue(a,tier),comparisonValue(b,tier),isHigherBetter());
+      return difference || a.model.localeCompare(b.model) || a.version.localeCompare(b.version);
+    }
+    function renderChart(pairs) {
+      pairs.sort(compareChartPairs);
+      $("chart").replaceChildren();
+      if (!pairs.length) {
+        $("chart").append(node("p", "Nenhuma medição comparável para esta seleção.", "empty"));
+        return;
+      }
+      const values = pairs.flatMap(pair => ["default","priority"].map(tier => comparisonValue(pair,tier))).filter(Number.isFinite);
+      const max = values.length ? Math.max(...values) : 0;
+      for (const [index,pair] of pairs.entries()) {
+        const row = node("div", undefined, "chart-row");
+        const label = node("div");
+        label.append(node("span", `${index+1}. ${pair.model}`, "model-name"), node("span", pair.version, "version"));
+        row.append(label);
+        const tracks = node("div", undefined, "tracks");
+        for (const tier of ["default", "priority"]) {
+          const value = comparisonValue(pair, tier);
+          const track = node("div", undefined, "track");
+          const container = node("div", undefined, "bar-container");
+          const bar = node("div", undefined, "bar" + (tier === "priority" ? " priority" : ""));
+          bar.style.width = value === null || !max ? "0%" : (value / max * 100) + "%";
+          bar.style.minWidth = value === null || value === 0 ? "0" : "1px";
+          container.append(bar);
+          const count = pair[tier]?.successes ?? 0;
+          track.setAttribute("aria-label", `${pair.model}, ${tierLabel(tier)}, ${fmt(value)} ${metricUnit()}, n=${count}`);
+          track.title = track.getAttribute("aria-label");
+          track.append(container, node("span", fmt(value) + (value === null ? "" : " " + metricUnit()), "bar-value"));
+          tracks.append(track);
+        }
+        row.append(tracks);
+        const change = gain(pair);
+        const delta = node("div", change === null ? "N/D" : (change > 0 ? "+" : "") + fmt(change) + "%",
+          "gain" + (change === null || change === 0 ? "" : change > 0 ? " positive" : " negative"));
+        const dispersion=["stddev","cv_pct"].includes($("stat").value);
+        delta.append(node("small", change === null ? "sem comparação" : change === 0 ? "sem diferença" :
+          dispersion ? (change < 0 ? "Priority mais variável" : "Priority mais estável") : change < 0 ? "Priority pior" : "Priority melhor"));
+        row.append(delta);
+        $("chart").append(row);
+      }
+    }
+    function visibleRows() {
+      const groups=new Map();
+      for (const row of selectedRows().filter(row => $("excluded").checked || row.comparable)) {
+        const key=modelKey(row);
+        if (!groups.has(key)) groups.set(key,{model:row.model,version:row.version,rows:[]});
+        const group=groups.get(key);
+        group.rows.push(row);
+        if (row.comparable) group[row.actual_tier]=row;
+      }
+      const sort=$("table-sort").value, descending=$("table-direction").value==="desc";
+      const value=group => {
+        const row=group[$("table-reference").value];
+        if (!row) return null;
+        return row[sort==="n" ? "attempts" : sort==="metric_n" ? $("metric").value+"_n" : sort];
+      };
+      return [...groups.values()].sort((a,b) => {
+        const validA=Boolean(a.default || a.priority),validB=Boolean(b.default || b.priority);
+        if (validA!==validB) return validA ? -1 : 1;
+        if (sort==="chart") return compareChartPairs(a,b);
+        const name=a.model.localeCompare(b.model) || a.version.localeCompare(b.version);
+        if (sort==="model") return descending ? -name : name;
+        return compareNumbers(value(a),value(b),descending) || name;
+      }).flatMap((group,index) => group.rows.sort((a,b) =>
+        Number(b.comparable)-Number(a.comparable) ||
+        Number(a.requested_tier!=="default")-Number(b.requested_tier!=="default") ||
+        String(a.actual_tier).localeCompare(String(b.actual_tier)) ||
+        a.exclusions.join().localeCompare(b.exclusions.join()),
+      ).map(row => ({...row,model_order:index+1})));
+    }
+    function orderedModels() {
+      const names=new Set(selectedRows().map(modelKey)),order=new Map(visibleRows().map(row => [modelKey(row),row.model_order]));
+      return (currentRun().models || []).filter(model => names.has(modelKey(model))).sort((a,b) =>
+        (order.get(modelKey(a)) ?? Infinity)-(order.get(modelKey(b)) ?? Infinity) ||
+        a.name.localeCompare(b.name) || a.version.localeCompare(b.version),
+      );
+    }
+    function tokenText(totals, field, requests) {
+      const value = totals?.[field+"_sum"], reported = totals?.[field+"_reported"];
+      if (!Number.isFinite(value) || reported===0) return "N/D";
+      return integer(value) + (!Number.isFinite(reported) || !Number.isFinite(requests) || reported < requests ? `* (${known(reported)}/${known(requests)} chamadas)` : "");
+    }
+    function tableColumns() {
+      const selected = $("metric").value+"_"+$("stat").value;
+      const column = (key,label,width=112,value=null) => ({key,label,width,value:value || (row => fmt(row[key]))});
+      const tokenColumn = (field,label) => column(field+"_sum",label,132,row => tokenText(row,field,row.attempts));
+      const columns = [
+        column("rank","Ordem modelo",88,row => row.comparable ? String(row.model_order) : "—"),
+        column("model","Modelo / versão",176,row => row.model+"\n"+row.version),
+        column("tier","Processamento",116,row => tierLabel(row.actual_tier)+
+          (row.actual_tier !== row.requested_tier ? "\n(pedido "+tierLabel(row.requested_tier)+")" : "")),
+        column("quality","Qualidade",106,row => row.comparable ? "Comparável" : "Excluído"),
+        column("n","n",48,row => String(row.attempts)),
+      ];
+      const views = {
+        summary: [
+          column("ttft_ms_p50","TTFT p50 (ms)"),column("ttft_ms_p95","TTFT p95 (ms)"),
+          column("total_ms_p50","Total p50 (ms)"),column("total_ms_p95","Total p95 (ms)"),
+          column("total_ms_p99","Total p99 (ms)"),column("tpot_ms_p50","TPOT p50 (ms)"),
+          column("generation_tokens_per_s_p50","Geração p50 (tok/s)"),
+          column("end_to_end_tokens_per_s_p50","Ponta a ponta p50 (tok/s)"),
+          tokenColumn("total_tokens","Tokens totais (soma)"),
+        ],
+        latency: [
+          column("headers_ms_p50","Headers p50 (ms)"),column("first_sse_ms_p50","1º SSE p50 (ms)"),
+          column("ttft_ms_p50","TTFT p50 (ms)"),column("ttft_ms_p95","TTFT p95 (ms)"),
+          column("last_token_ms_p50","TTLT p50 (ms)"),column("generation_ms_p50","Geração p50 (ms)"),
+          column("total_ms_mean","Total média (ms)"),column("total_ms_p50","Total p50 (ms)"),
+          column("total_ms_p90","Total p90 (ms)"),column("total_ms_p95","Total p95 (ms)"),
+          column("total_ms_p99","Total p99 (ms)"),column("stream_tail_ms_p50","Cauda p50 (ms)"),
+        ],
+        throughput: [
+          column("tpot_ms_p50","TPOT p50 (ms)"),column("tpot_ms_p95","TPOT p95 (ms)"),
+          column("generation_tokens_per_s_mean","Geração média (tok/s)"),
+          column("generation_tokens_per_s_p50","Geração p50 (tok/s)"),
+          column("generation_tokens_per_s_p95","Geração p95 (tok/s)"),
+          column("end_to_end_tokens_per_s_p50","Ponta a ponta p50 (tok/s)"),
+          column("chunk_gap_p50_ms_p50","Gap chunk p50 mediano (ms)"),
+          column("chunk_gap_p95_ms_p50","Gap chunk p95 mediano (ms)"),
+          column("chunk_gap_max_ms_p95","Gap máximo p95 (ms)"),
+        ],
+        variability: [
+          column("total_ms_mean","Total média (ms)"),column("total_ms_stddev","Total desvio padrão (ms)"),
+          column("total_ms_cv_pct","Total CV (%)"),column("total_ms_min","Total mínimo (ms)"),
+          column("total_ms_max","Total máximo (ms)"),column("total_ms_p90","Total p90 (ms)"),
+          column("total_ms_p99","Total p99 (ms)"),column("ttft_ms_stddev","TTFT desvio padrão (ms)"),
+          column("ttft_ms_cv_pct","TTFT CV (%)"),
+        ],
+        tokens: [
+          column("input_target","Input alvo / chamada"),column("output_target","Output cap / chamada"),
+          column("prompt_tokens_mean","Input real médio"),column("completion_tokens_mean","Completion real médio"),
+          tokenColumn("prompt_tokens","Input (soma)"),tokenColumn("completion_tokens","Completion (soma)"),
+          tokenColumn("total_tokens","Total (soma)"),tokenColumn("cached_tokens","Cache (parte do input)"),
+          tokenColumn("reasoning_tokens","Reasoning (parte do output)"),
+        ],
+      };
+      columns.push(...views[$("table-view").value]);
+      if (!columns.some(column => column.key === selected)) columns.push(column(
+        selected,`${METRICS[$("metric").value][0]} ${$("stat").value} (${metricUnit()})`,140,
+      ));
+      columns.push(column("metric_n","n da métrica escolhida",108,row => String(row[$("metric").value+"_n"] ?? "N/D")));
+      return columns;
+    }
+    function syncTableSorting() {
+      const previous=$("table-sort").value;
+      const columns=tableColumns().filter(column => !["rank","tier","quality"].includes(column.key));
+      options($("table-sort"),[["chart","Mesma ordem do gráfico"],...columns.map(column => [column.key,column.label])],previous);
+      $("table-direction").disabled=$("table-sort").value==="chart";
+      $("table-reference").disabled=["chart","model"].includes($("table-sort").value);
+    }
+    function tableOrderDescription() {
+      if ($("table-sort").value==="chart") return `Modelos na mesma ordem do gráfico: ${$("sort").selectedOptions[0].textContent}; `+
+        `${METRICS[$("metric").value][0]} · ${$("stat").value} (${metricUnit()}).`;
+      return `Modelos ordenados por ${$("table-sort").selectedOptions[0].textContent}, `+
+        ($("table-direction").value==="asc" ? "crescente" : "decrescente")+
+        ($("table-sort").value==="model" ? "." : `; referência ${tierLabel($("table-reference").value)}.`);
+    }
+    function selectionUsage() {
+      return sumUsage(selectedRows());
+    }
+    function reportSnapshot() {
+      const run = currentRun(), rows = visibleRows(), settings = run.settings || {}, usage = selectionUsage();
+      const selected = selectedRows(), clean = selected.filter(row => row.comparable);
+      const names = new Set(selected.map(row => row.model));
+      const models = orderedModels();
+      const count = clean.reduce((sum,row) => sum+row.attempts,0);
+      const profiles = models.map(model => `${model.name} (${model.version}): reasoning=${model.reasoning_effort ?? (model.name === "gpt-4.1" ? "N/A" : "não registrado")}; `+
+        `verbosity=${model.verbosity ?? (model.name === "gpt-4.1" ? "N/A" : "omitido/padrão")}.`);
+      const input = $("input").value ? Number($("input").value) : null, output = $("output").value ? Number($("output").value) : null;
+      const notes = [
+        tableOrderDescription()+" Por modelo: Standard, Priority, depois exclusões. Referência ausente e modelos sem amostras comparáveis no final.",
+        "Standard = service_tier=default; Priority = service_tier=priority. Somente tier confirmado igual ao solicitado entra na comparação.",
+        "Tokens = usage real; total = input + completion. Cache já integra input; reasoning já integra completion. * = soma parcial; não é fatura.",
+        "Calibração e warmup não entram nas latências. Campos ausentes = N/D. Percentis interpolados; n pequeno não sustenta conclusões de cauda.",
+        ...reportCaveats,
+        "Fonte: Microsoft Learn · azure/foundry/openai/concepts/priority-processing",
+      ];
+      const columns = tableColumns();
+      return {
+        id:run.id, columns, rows, profiles, notes,
+        brief:compactContext(run,usage,{
+          experiment:`${fmt(input)} input → ${fmt(output)} output cap`,
+          quality:`${count}/${known(usage.requests)} comparáveis · ${known(usage.requests===null ? null : usage.requests-count)} excluídas · ${known(usage.errors)} erros`,
+          filter:`Filtro: ${$("model").value==="all" ? "todos os modelos" : $("model").value}; busca ${$("result-search").value.trim() || "nenhuma"}; `+
+            `${$("pair-filter").value==="paired" ? "somente pares" : "pares incompletos incluídos"}; exclusões ${$("excluded").checked ? "visíveis" : "ocultas"}. `+tableOrderDescription(),
+        }),
+        fileStem:`benchmark-${run.id}-${$("input").value}-${$("output").value}-${$("table-view").value}`,
+        cells:rows.map((row,index) => columns.map(column => column.value(row,index))),
+        meta:[
+          ...runMeta(run),
+          ["Implantação","Global Standard · PAYG · região do recurso: "+(run.location || "N/D")],
+          ["Tokens alvo por chamada",`${fmt(input)} input + ${fmt(output)} output cap = ${fmt(input === null || output === null ? null : input+output)} tokens-alvo`],
+          ["Seleção",`${names.size} modelos; ${count} comparáveis / ${usage.requests} tentativas; ${usage.requests-count} excluídas; ${usage.errors} falhas (${usage.requests ? fmt(100*usage.errors/usage.requests)+"%" : "N/D"})`],
+          ["Visão / ordem",$("table-view").selectedOptions[0].textContent+" · "+tableOrderDescription()],
+          ["Filtros de modelos",`Modelo: ${$("model").value==="all" ? "todos" : $("model").value}; busca: ${$("result-search").value.trim() || "nenhuma"}; `+
+            ($("pair-filter").value==="paired" ? "somente pares comparáveis" : "inclui pares incompletos")+
+            `; exclusões ${$("excluded").checked ? "visíveis" : "ocultas"}`],
+          ["Tolerâncias",`Input ±${known(settings.input_tolerance)}; output ±${known(settings.output_tolerance)} tokens; cache=0 e reasoning=0 para comparar`],
+          ["Protocolo","Chat Completions · streaming · uso reportado · sem retries · sampling omitido/padrão"],
+        ],
+        usageLines:usageLines(run,usage,["calibrate","warmup","measure"]),
+      };
+    }
+    function renderTable() {
+      syncTableSorting();
+      const report = reportSnapshot(), rows = report.rows;
+      $("table-count").textContent = `${integer(new Set(rows.map(modelKey)).size)} modelos · ${integer(rows.length)} grupos`;
+      $("export").disabled = !rows.length;
+      $("export-image").disabled = !rows.length || exportingImage;
+      $("table-head").replaceChildren();
+      for (const column of report.columns) {
+        const header = node("th",column.label); header.scope="col"; header.dataset.field=column.key;
+        if (!["rank","tier","quality"].includes(column.key)) {
+          const selected=$("table-sort").value===column.key;
+          const button=node("button",column.label+(selected ? $("table-direction").value==="asc" ? " ↑" : " ↓" : ""),"sort-button");
+          button.type="button"; button.title="Ordenar modelos mantendo Standard e Priority juntos";
+          header.replaceChildren(button);
+          if (selected) header.setAttribute("aria-sort",$("table-direction").value==="asc" ? "ascending" : "descending");
+          button.addEventListener("click",() => {
+            $("table-sort").value=column.key;
+            $("table-direction").value=selected && $("table-direction").value==="asc" ? "desc" : "asc";
+            render();
+          });
+        }
+        $("table-head").append(header);
+      }
+      $("table-caption").textContent = report.notes[0];
+      $("table-body").replaceChildren();
+      for (const [index,row] of rows.entries()) {
+        const tr = node("tr", undefined, row.comparable ? "" : "excluded");
+        tr.dataset.model=modelKey(row);
+        if (!index || modelKey(rows[index-1])!==modelKey(row)) tr.classList.add("pair-start");
+        if (row.model_order%2===0) tr.classList.add("pair-alternate");
+        for (const [offset,column] of report.columns.entries()) {
+          const cell = node("td",report.cells[index][offset],column.key === "rank" ? "rank" : "");
+          cell.dataset.field=column.key;
+          if (column.key === "model") {
+            cell.replaceChildren(node("span",row.model,"model-name"),node("span",row.version,"version"));
+          } else if (column.key === "tier") {
+            cell.title=`Solicitado: ${tierLabel(row.requested_tier)} (service_tier=${row.requested_tier}); confirmado: ${tierLabel(row.actual_tier)}.`;
+          } else if (column.key === "quality") {
+            const badge=node("span",report.cells[index][offset],"status"+(row.comparable ? " valid" : ""));
+            badge.title=row.exclusions.map(reason => REASONS[reason] || reason).join("; ");
+            cell.replaceChildren(badge);
+          }
+          tr.append(cell);
+        }
+        $("table-body").append(tr);
+      }
+      if (!rows.length) {
+        const cell = node("td","Nenhum grupo disponível. Ajuste os filtros ou inclua os grupos excluídos.","empty");
+        cell.colSpan=report.columns.length;
+        const row=node("tr"); row.append(cell); $("table-body").append(row);
+      }
+      renderReportContext("report-",report);
+      renderBrief("chart-overview","chart-usage",report.brief);
+      renderBrief("table-overview","table-usage",report.brief);
+      $("chart-caveats").replaceChildren(...report.brief.footer.map(line => node("p",line)));
+      $("export-chart-image").disabled=!pairsFor(selectedRows()).length || exportingImage;
+    }
+    function renderContext(run) {
+      const phase = name => {
+        const counts = run.phases[name] || {requests:0,errors:0};
+        return `${integer(counts.requests)} chamadas / ${integer(counts.errors)} erros`;
+      };
+      const values = [
+        ["Execução", run.id], ["Início (local)", run.started ? new Date(run.started).toLocaleString("pt-BR") : "N/D"],
+        ["Estado", run.cancelled ? "Cancelada / parcial" : run.completed ? "Matriz concluída" : "Incompleta / diagnóstico"],
+        ["Recurso", run.account || "N/D"], ["Projeto", run.project || "N/D"], ["Região do recurso", run.location || "N/D"],
+        ["Concorrência", run.concurrency ?? "N/D"], ["Intervalo", run.interval === undefined ? "N/D" : `${run.interval} s`],
+        ["Calibração", phase("calibrate")], ["Warmup", phase("warmup")], ["Medição", phase("measure")],
+        ["Previstas (run)", run.expected ?? "N/D"]
+      ];
+      $("context").replaceChildren();
+      for (const [label,value] of values) $("context").append(node("dt",label),node("dd",String(value)));
+    }
+    function render() {
+      const run = currentRun(), rows = selectedRows(), clean = rows.filter(row => row.comparable);
+      const pairs = pairsFor(rows);
+      const valid = clean.reduce((sum,row) => sum + row.successes, 0);
+      const excluded = rows.filter(row => !row.comparable).reduce((sum,row) => sum + row.attempts,0);
+      const errors = rows.reduce((sum,row) => sum + row.errors,0);
+      const count429 = rows.reduce((sum,row) => sum + row.http_429,0);
+      const counts = clean.map(row => row.successes);
+      $("models-count").textContent = integer(new Set(rows.map(row => row.model)).size);
+      $("valid-count").textContent = integer(valid);
+      $("excluded-count").textContent = `${integer(excluded)} / ${integer(errors)}`;
+      $("error-count").textContent = `${integer(count429)} respostas 429 · seleção atual`;
+      $("pairs-count").textContent = integer(pairs.filter(pair => pair.default && pair.priority).length);
+      $("sample-range").textContent = counts.length ?
+        `n=${Math.min(...counts)}–${Math.max(...counts)} por modelo/tier` : "Sem warmup ou calibração";
+      const notice = $("notice");
+      notice.replaceChildren();
+      if (!run.summary.length) {
+        notice.append(node("strong","Execução sem medições."));
+        notice.append(node("span","Este diagnóstico não chegou à fase medida. Calibração e erros de preparação estão no contexto abaixo; não são resultados de latência dos modelos."));
+      } else if (!clean.length) {
+        notice.append(node("strong","Nenhuma amostra comparável nesta seleção."));
+        notice.append(node("span","Ative “Mostrar grupos excluídos” para examinar os grupos e os motivos. Respostas com tamanho ou tier divergente não entram no gráfico."));
+      } else {
+        const minimum = Math.min(...counts);
+        notice.append(node("strong", minimum < 30 ? "Piloto exploratório — não é um ranking conclusivo." : "Resultados observados — sem garantia de desempenho futuro."));
+        notice.append(node("span", `Nesta seleção, n mínimo = ${minimum} por modelo/tier. ` +
+          (minimum < 30 ? "Percentis de cauda precisam de muito mais amostras; com n=1 todos os percentis coincidem. " : "") +
+          (!run.completed ? "A execução está incompleta. " : "") +
+          "Não combinamos execuções nem tamanhos de tokens diferentes."));
+      }
+      const metric = METRICS[$("metric").value];
+      $("chart-title").textContent = `${metric[0]} por modelo · ${$("stat").value}`;
+      $("metric-help").textContent = ["stddev","cv_pct"].includes($("stat").value) ?
+        `Dispersão de ${metric[0]}; menor é melhor. `+($("stat").value === "cv_pct" ? "CV = desvio padrão / média × 100 (%); requer n≥2 e média não nula." : "Desvio padrão amostral; requer n≥2.") : metric[2];
+      $("chart-note").textContent = `Escala compartilhada em ${metricUnit()}. Ganho = ` +
+        (isHigherBetter() ? "(Priority − Standard)" : "(Standard − Priority)") +
+        " / Standard × 100; positivo favorece Priority. N/D indica dado ausente, amostra insuficiente ou divisão por zero.";
+      const negatives=pairs.filter(pair => gain(pair)!==null && gain(pair)<0);
+      $("gain-diagnostics").textContent=negatives.length ? negatives.map(pair => {
+        const standard=pair.default,priority=pair.priority;
+        return `${pair.model}: ${fmt(gain(pair))}% na métrica selecionada; n Standard/Priority=${standard.successes}/${priority.successes}; `+
+          `TTFT p50 ${fmt(standard.ttft_ms_p50)}/${fmt(priority.ttft_ms_p50)} ms; geração p50 ${fmt(standard.generation_ms_p50)}/${fmt(priority.generation_ms_p50)} ms`;
+      }).join(". ")+". Não é possível atribuir a causa somente a esses agregados." : "Nenhum ganho negativo na seleção atual, ou faltam pares comparáveis.";
+      renderChart(pairs); renderTable(); renderContext(run);
+      modelParameters($("run-parameters"), orderedModels(), true);
+    }
+    function downloadCsv() {
+      const rows = visibleRows();
+      if (!rows.length) return;
+      const fields = ["run_id", ...Object.keys(rows[0])];
+      const cell = value => {
+        let text = value === null || value === undefined ? "" : Array.isArray(value) ? value.join("; ") : String(value);
+        // Avoid spreadsheet formula execution for imported model names/metadata.
+        if (/^[=+@\t\r-]/.test(text) && !Number.isFinite(value)) text = "'" + text;
+        return '"' + text.replaceAll('"','""') + '"';
+      };
+      const content = "\ufeff" + [fields, ...rows.map(row => fields.map(field => field === "run_id" ? currentRun().id : row[field]))]
+        .map(row => row.map(cell).join(",")).join("\r\n");
+      const url = URL.createObjectURL(new Blob([content], {type:"text/csv;charset=utf-8"}));
+      const link = node("a"); link.href = url; link.download = `latencia-${currentRun().id}-${$("input").value}-${$("output").value}.csv`;
+      document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url),1000);
+    }
+    let exportingImage=false;
+    async function compactPng({title,brief,filename,columns=[],cells=[],pairs=null}) {
+      const canvas=node("canvas"), ctx=canvas.getContext("2d");
+      if (!ctx) throw new Error("Canvas 2D indisponível.");
+      const css=getComputedStyle(document.documentElement), color=key => css.getPropertyValue("--cp-"+key).trim();
+      const width=1600, margin=32, content=width-margin*2, blocks=[], table=[], charts=[];
+      const font=(size,bold=false) => `${bold ? 600 : 400} ${size}px "Segoe UI", Aptos, Calibri, sans-serif`;
+      function wrap(value,limit) {
+        const lines=[];
+        for (const paragraph of String(value).split("\n")) {
+          let line="";
+          for (const word of paragraph.split(/\s+/)) {
+            if (ctx.measureText(line ? line+" "+word : word).width<=limit) {line+=(line ? " " : "")+word;continue;}
+            if (line) lines.push(line);
+            line="";
+            for (const character of word) {
+              if (line && ctx.measureText(line+character).width>limit) {lines.push(line);line="";}
+              line+=character;
+            }
+          }
+          lines.push(line);
+        }
+        return lines;
+      }
+      let y=28;
+      function text(value,size=15,bold=false,tone="text-muted",gap=8) {
+        ctx.font=font(size,bold);
+        const lines=wrap(value,content);
+        blocks.push({lines,y,size,bold,tone});y+=lines.length*(size+4)+gap;
+      }
+      text(title,28,true,"accent",12);
+      text(brief.strip.join("  |  "),17,true,"text",10);
+      text(brief.facts.join("  |  "),15,false,"text-muted",12);
+      if (pairs) {
+        text("Standard    /    Priority     ·     n = amostras da métrica     ·     Ganho positivo favorece Priority",14,true,"text-muted",12);
+        pairs.forEach((pair,index) => {
+          ctx.font=font(16,true);const labels=wrap(`${index+1}. ${pair.model}`,280);
+          ctx.font=font(12);const versions=wrap(pair.version,280);
+          const height=Math.max(60,labels.length*20+versions.length*16+16);
+          charts.push({pair,labels,versions,top:y,height});y+=height;
+        });
+      } else {
+        const weights=columns.map(column => column.width || 100), total=weights.reduce((a,b) => a+b,0);
+        const widths=weights.map(weight => weight/total*content);
+        const addRow=(values,header,index) => {
+          ctx.font=font(13,header);
+          const lines=values.map((value,index) => wrap(value,widths[index]-12));
+          const height=Math.max(30,Math.max(...lines.map(cell => cell.length))*17+12);
+          table.push({lines,widths,top:y,height,header,index});y+=height;
+        };
+        addRow(columns.map(column => column.label),true,0);
+        cells.forEach((row,index) => addRow(row,false,index));
+      }
+      y+=14;
+      for (const line of brief.footer) text(line,13,false,"text-muted",4);
+      const height=Math.max(900,Math.ceil(y+24));
+      if (height>16000 || width*height>32000000) throw new Error("Relatório excede limite seguro de PNG (1600 × 16000 px / 32 MP). Use CSV ou reduza a seleção; nenhuma linha foi cortada.");
+      canvas.width=width;canvas.height=height;ctx.textBaseline="top";
+      ctx.fillStyle=color("surface");ctx.fillRect(0,0,width,height);
+      for (const block of blocks) {
+        ctx.font=font(block.size,block.bold);ctx.fillStyle=color(block.tone);
+        block.lines.forEach((line,index) => ctx.fillText(line,margin,block.y+index*(block.size+4)));
+      }
+      for (const row of table) {
+        ctx.fillStyle=color(row.header || row.index%2 ? "surface-soft" : "surface");ctx.fillRect(margin,row.top,content,row.height);
+        ctx.font=font(13,row.header);ctx.fillStyle=color(row.header ? "text-muted" : "text");
+        let x=margin;
+        row.lines.forEach((lines,index) => {lines.forEach((line,lineIndex) => ctx.fillText(line,x+6,row.top+6+lineIndex*17));x+=row.widths[index];});
+      }
+      const maximum=pairs ? Math.max(0,...pairs.flatMap(pair => ["default","priority"].map(tier => comparisonValue(pair,tier))).filter(Number.isFinite)) : 0;
+      for (const [index,{pair,labels,versions,top,height}] of charts.entries()) {
+        ctx.fillStyle=color(index%2 ? "surface-soft" : "surface");ctx.fillRect(margin,top,content,height-2);
+        ctx.fillStyle=color("text");ctx.font=font(16,true);labels.forEach((line,i) => ctx.fillText(line,margin+8,top+7+i*20));
+        ctx.font=font(12);ctx.fillStyle=color("text-muted");versions.forEach((line,i) => ctx.fillText(line,margin+8,top+10+labels.length*20+i*16));
+        ["default","priority"].forEach((tier,offset) => {
+          const value=comparisonValue(pair,tier), left=margin+300, barY=top+10+offset*25, trackWidth=content-740;
+          ctx.fillStyle=color("surface-soft");ctx.fillRect(left,barY,trackWidth,12);
+          ctx.fillStyle=color(tier==="priority" ? "accent" : "border-strong");
+          if (value!==null && maximum>0) ctx.fillRect(left,barY,Math.max(1,value/maximum*trackWidth),12);
+          ctx.font=font(14);ctx.fillStyle=color("text");
+          ctx.fillText(`${tierLabel(tier)}: ${fmt(value)} ${metricUnit()} · n=${known(pair[tier]?.[$("metric").value+"_n"])}`,left+trackWidth+12,barY-2);
+        });
+        const change=gain(pair);
+        ctx.font=font(17,true);ctx.fillStyle=color(change>0 ? "success" : change<0 ? "danger" : "text-muted");
+        ctx.fillText(change===null ? "N/D" : (change>0 ? "+" : "")+fmt(change)+"%",width-margin-112,top+19);
+      }
+      const blob=await new Promise((resolve,reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error("Não foi possível codificar o PNG.")),"image/png"));
+      toolDownload(blob,filename);
+      return `${width} × ${height} px`;
+    }
+    async function downloadImage(chartOnly=false) {
+      if (exportingImage || (chartOnly ? !pairsFor(selectedRows()).length : !visibleRows().length)) return;
+      const errorId=chartOnly ? "chart-export-error" : "report-export-error", statusId=chartOnly ? "chart-image-status" : "image-status";
+      exportingImage=true;$("export-image").disabled=$("export-chart-image").disabled=true;
+      $(errorId).textContent="";$(statusId).textContent="Gerando PNG compacto…";
+      try {
+        const report=reportSnapshot();
+        const dimensions=await compactPng({
+          title:chartOnly ? $("chart-title").textContent+" · Standard / Priority" : "Resultados · "+$("table-view").selectedOptions[0].textContent,
+          brief:report.brief,filename:(chartOnly ? "grafico-" : "")+report.fileStem+".png",
+          columns:report.columns,cells:report.cells,pairs:chartOnly ? pairsFor(selectedRows()).sort(compareChartPairs) : null,
+        });
+        $(statusId).textContent=`PNG · ${dimensions} · seleção completa, sem cortes.`;
+      } catch (error) {$(errorId).textContent="Não foi possível exportar: "+error.message;$(statusId).textContent="";}
+      finally {exportingImage=false;$("export-image").disabled=!visibleRows().length;$("export-chart-image").disabled=!pairsFor(selectedRows()).length;}
+    }
+    const toolRuns = [...(DATA.tool_runs || [])];
+    let toolCatalog = DATA.tool_catalog || {}, toolConnected=false, toolBusy=false, toolOwnJob=false;
+    let toolSettled=null, toolTimer=null, toolFollow=null, toolObservedJob=null, toolHistorySelection=false;
+    const toolTier = tier => tier === "decision" ? "API Decision · Global Standard (sem Priority)" : tierLabel(tier);
+    const toolMode = kind => kind === "decision" ? "Adaptador de escolha" : "Function call nativo";
+    const toolRun = () => toolRuns.find(run => run.id === $("tools-run").value);
+    const toolTiming = field => /^(selection|headers|http_total|tool|agent_total)_ms_/.test(field);
+    const toolColumns = {
+      summary: [["accuracy_pct","Acurácia %"],["sample","n correto comparável / attempts"],["errors","Erros"],["excluded","Excluídas"],["selection_ms_p50","Seleção p50"],["selection_ms_p95","Seleção p95"],["http_total_ms_p50","HTTP total p50"],["headers_ms_p50","Headers p50"],["tool_ms_p50","Dispatch p50"],["agent_total_ms_p50","Agente total p50"]],
+      latency: ["p50","p90","p95","p99","mean","min","max","stddev","cv_pct"].map(stat => ["selection_ms_"+stat,"Seleção "+({mean:"média",min:"mín",max:"máx",stddev:"desvio",cv_pct:"CV %"}[stat] || stat)]),
+      tokens: [["prompt_tokens_sum","Input soma"],["prompt_tokens_reported","Input reportado / attempts"],["completion_tokens_sum","Completion soma"],["completion_tokens_reported","Completion reportado / attempts"],["total_tokens_sum","Total soma"],["total_tokens_reported","Total reportado / attempts"],["http_429","HTTP 429"]]
+    };
+    function toolSettings() {
+      return {
+        models:[...$("tools-models").querySelectorAll("input:checked")].map(input => input.value),
+        tiers:[$("tools-standard").checked ? "default" : null,$("tools-priority").checked ? "priority" : null].filter(Boolean),
+        cases:Number($("tools-cases").value), repetitions:Number($("tools-repetitions").value),
+        warmups:Number($("tools-warmups").value), padding_tokens:Number($("tools-padding-number").value),
+        interval:Number($("tools-interval").value), timeout:Number($("tools-timeout").value),
+        execution_target:$("tools-execution").value,
+        confirm_billing:$("tools-billing").checked
+      };
+    }
+    function toolEstimate() {
+      const settings=toolSettings(), models=toolCatalog.models || [];
+      const selected=models.filter(model => settings.models.includes(model.name));
+      const profiles=selected.reduce((sum,model) => sum+(model.kind === "decision" ? 1 : settings.tiers.length),0);
+      $("tools-estimate").textContent=`Runner: ${executionLabel("tools-execution")}. ${fmt(profiles*settings.cases*settings.repetitions)} medições planejadas + ${fmt(profiles*settings.warmups)} warmups. Decision não é multiplicado pelos tiers LLM.`+
+        (!settings.tiers.length ? " Selecione ao menos um tier LLM; esta seleção não muda o processamento do Decision." : "");
+      const valid=[...$("tools-settings").querySelectorAll("input[type=number]")].every(input => input.checkValidity());
+      $("tools-start").disabled=!toolConnected || toolBusy || jobBusy || !settings.confirm_billing || !selected.length || !settings.tiers.length || !valid;
+      $("tools-cases-preview").replaceChildren(...(toolCatalog.cases || []).slice(0,settings.cases).map(item =>
+        node("li",`${item.id} · ${item.text} → ${item.expected_tool}`)));
+    }
+    function toolConfigure(catalog) {
+      toolCatalog=catalog || {};
+      const models=toolCatalog.models || [];
+      $("tools-models").replaceChildren(...models.map(model => {
+        const label=node("label",undefined,"check"), input=node("input");
+        input.type="checkbox"; input.value=model.name;
+        input.checked=model.kind === "decision" || ["gpt-4.1","gpt-5.4-mini"].includes(model.name);
+        label.append(input,node("span",`${model.name} · ${toolMode(model.kind)}`));
+        return label;
+      }));
+      const parameters=node("table"), head=node("thead"), hr=node("tr"), body=node("tbody");
+      ["Modelo / versão","Interface","reasoning_effort","verbosity"].forEach(text => hr.append(node("th",text)));
+      head.append(hr);
+      for (const model of models) {
+        const row=node("tr");
+        [model.name+" / "+model.version,toolMode(model.kind),model.kind === "decision" ? "N/A" : model.reasoning_effort ?? "Omitido",model.kind === "decision" ? "N/A" : model.verbosity ?? "Omitida"].forEach(text => row.append(node("td",text)));
+        body.append(row);
+      }
+      parameters.append(head,body); $("tools-parameters").replaceChildren(parameters);
+      $("tools-catalog").replaceChildren(...(toolCatalog.tools || []).map(tool => node("li",`${tool.name}({}) · ${tool.description}`)));
+      for (const [key,id] of [["repetitions","repetitions"],["warmups","warmups"],["padding_tokens","padding-number"],["interval","interval"],["timeout","timeout"]]) {
+        const limit=toolCatalog.limits?.[key], input=$("tools-"+id);
+        if (limit) { input.min=limit.min; input.max=limit.max; input.value=limit.default; }
+      }
+      const padding=$("tools-padding");
+      padding.min=$("tools-padding-number").min; padding.max=$("tools-padding-number").max; padding.value=$("tools-padding-number").value;
+      if (toolCatalog.limits?.cases) $("tools-cases").value=String(toolCatalog.limits.cases.default);
+      toolEstimate();
+    }
+    function toolRunOptions(preferred) {
+      if (preferred===undefined) {
+        preferred=$("tools-run").value;
+        if (!toolHistorySelection && toolObservedJob===null) {
+          preferred=[...toolRuns].sort((a,b) => Number(Boolean(b.completed))-Number(Boolean(a.completed)) ||
+            (Date.parse(b.started) || 0)-(Date.parse(a.started) || 0) || b.id.localeCompare(a.id))[0]?.id;
+        }
+      }
+      options($("tools-run"),toolRuns.map(run => [run.id,`${run.id} · ${run.cancelled ? "cancelada" : run.completed ? "concluída" : "parcial"}`]),preferred);
+    }
+    function toolGroups() {
+      const groups=new Map(), search=$("tools-search").value.trim().toLowerCase();
+      for (const row of toolRun()?.summary || []) {
+        if (!(row.model+" "+row.version).toLowerCase().includes(search)) continue;
+        const key=JSON.stringify([row.model,row.version,row.kind]);
+        if (!groups.has(key)) groups.set(key,[]);
+        const group=groups.get(key);
+        if (!group.some(item => item.requested_tier === row.requested_tier)) group.push(row);
+      }
+      const metric=$("tools-sort").value, direction=$("tools-direction").value;
+      const reference=group => group.find(row => row.requested_tier === "default") || group[0];
+      const value=row => {
+        if (metric === "accuracy") return row.accuracy_pct;
+        return row.comparable > 0 ? row[metric] : null;
+      };
+      return [...groups.values()].sort((a,b) => {
+        const ra=reference(a),rb=reference(b),va=value(ra),vb=value(rb),fa=Number.isFinite(va),fb=Number.isFinite(vb);
+        if (fa!==fb) return fa ? -1 : 1;
+        const desc=direction === "desc" || (direction === "auto" && metric === "accuracy");
+        if (fa && va!==vb) return (va-vb)*(desc ? -1 : 1);
+        if (metric === "accuracy") {
+          const ta=ra.comparable > 0 ? ra.selection_ms_p50 : null,tb=rb.comparable > 0 ? rb.selection_ms_p50 : null;
+          if (Number.isFinite(ta)!==Number.isFinite(tb)) return Number.isFinite(ta) ? -1 : 1;
+          if (Number.isFinite(ta) && ta!==tb) return ta-tb;
+        }
+        return String(ra.model).localeCompare(String(rb.model));
+      }).map(group => group.sort((a,b) => (a.requested_tier === "priority")-(b.requested_tier === "priority")));
+    }
+    function toolCell(row,field) {
+      if (field === "sample") return `${fmt(row.comparable)} / ${fmt(row.attempts)}`;
+      if (toolTiming(field) && !(row.comparable > 0)) return "N/D";
+      if (field.endsWith("_sum")) {
+        const reported=row[field.replace("_sum","_reported")];
+        if (!(reported > 0)) return "N/D";
+        return fmt(row[field])+(reported < row.attempts ? " *" : "");
+      }
+      if (field.endsWith("_reported")) return `${fmt(row[field])} / ${fmt(row.attempts)}`;
+      return fmt(row[field]);
+    }
+    function toolRawRows() {
+      const status=$("tools-raw-status").value, model=$("tools-raw-model").value, caseId=$("tools-raw-case").value;
+      const rows=(toolRun()?.rows || []).filter(row => row.phase !== "warmup" &&
+        (model === "all" || row.model === model) && (caseId === "all" || row.case_id === caseId) &&
+        (status === "all" || status === "success" && row.status === "ok" && row.correct && row.comparable ||
+         status === "incorrect" && row.status === "ok" && !row.correct || status === "error" && row.status === "error" ||
+         status === "excluded" && !row.comparable));
+      const sort=$("tools-raw-sort").value;
+      if (sort === "case_id") rows.sort((a,b) => String(a.case_id).localeCompare(String(b.case_id)));
+      if (sort === "selection_ms") rows.sort((a,b) => {
+        const fa=Number.isFinite(a.selection_ms),fb=Number.isFinite(b.selection_ms);
+        return fa!==fb ? fa ? -1 : 1 : fa ? a.selection_ms-b.selection_ms : 0;
+      });
+      return rows;
+    }
+    function toolRenderRaw(reset=false) {
+      if (reset) {
+        const rows=toolRun()?.rows || [];
+        options($("tools-raw-model"),[["all","Todos"],...[...new Set(rows.map(row => row.model))].map(value => [value,value])],$("tools-raw-model").value);
+        options($("tools-raw-case"),[["all","Todos"],...[...new Set(rows.map(row => row.case_id))].map(value => [value,value])],$("tools-raw-case").value);
+      }
+      const rows=toolRawRows();
+      $("tools-raw-head").replaceChildren(...["Modelo","Processamento","Caso","Tool esperada","Tool selecionada","Resultado","Seleção ms","HTTP ms","Dispatch ms","Agente ms","Erro / exclusões"].map(text => node("th",text)));
+      $("tools-raw-body").replaceChildren(...rows.map(row => {
+        const tr=node("tr");
+        [row.model,toolTier(row.requested_tier),row.case_id,row.expected_tool,row.predicted_tool ?? "N/D",
+          row.status === "error" ? "Erro" : row.correct ? row.comparable ? "Correta · comparável" : "Correta · excluída" : "Incorreta",
+          fmt(row.selection_ms),fmt(row.http_total_ms),fmt(row.tool_ms),fmt(row.agent_total_ms),
+          [row.error,...(row.exclusions || [])].filter(Boolean).join(" · ") || "—"].forEach((text,index) => {
+            const cell=node("td",text); if (index===1) cell.title=`Solicitado: ${row.requested_tier}; retornado: ${row.actual_tier ?? "N/D"}`; tr.append(cell);
+          });
+        return tr;
+      }));
+      if (!rows.length) { const row=node("tr"),cell=node("td","Nenhuma requisição nesta seleção.","empty");cell.colSpan=11;row.append(cell);$("tools-raw-body").append(row); }
+      $("tools-export-raw").disabled=!rows.length;
+    }
+    function toolReportSnapshot() {
+      const run=toolRun(), rows=toolGroups().flat();
+      if (!run) return {meta:[["Histórico","Sem coletas de tools salvas. Consultar resultados não faz inferência."]],usageLines:[],profiles:[],notes:[],
+        brief:{strip:["Sem coletas de tools salvas"],facts:[],footer:[]}};
+      const settings=run.settings || {}, models=new Set(rows.map(row => row.model));
+      const count=field => rows.reduce((sum,row) => sum+(row[field] || 0),0);
+      return {
+        brief:compactContext(run,sumUsage(rows),{
+          experiment:`${known(settings.cases)} casos · padding ${known(settings.padding_tokens)} · output cap LLM 128`,
+          quality:`${count("comparable")}/${count("attempts")} corretas comparáveis · ${count("excluded")} excluídas · ${count("errors")} erros`,
+          filter:`Filtro: busca ${$("tools-search").value.trim() || "nenhuma"} · ${$("tools-view").selectedOptions[0].textContent} · ordem ${$("tools-sort").selectedOptions[0].textContent}, ${$("tools-direction").selectedOptions[0].textContent}. Blocos Standard / Priority.`,
+          tool:true,
+        }),
+        meta:[
+          ...runMeta(run),
+          ["Perfil / protocolo",`${run.profile || "tool-routing-v1"} · seleção completa não streaming · rede incluída · dispatch local separado`],
+          ["Casos / tokens alvo",`${known(settings.cases)} casos; padding local aproximado ${known(settings.padding_tokens)} tokens; LLM output cap 128, não equivale a completion real`],
+          ["Seleção",`${models.size} modelos; ${count("comparable")} corretas comparáveis / ${count("attempts")} tentativas; ${count("excluded")} excluídas; ${count("errors")} erros`],
+          ["Filtros / visão / ordem",`Busca: ${$("tools-search").value.trim() || "nenhuma"}; ${$("tools-view").selectedOptions[0].textContent}; ${$("tools-sort").selectedOptions[0].textContent}; ${$("tools-direction").selectedOptions[0].textContent}. Blocos Standard / Priority; Decision sem Priority.`],
+          ["Controle LLM","n=1; stream=false; parallel_tool_calls=false; tool_choice=required; temperature omitida; três tools sem argumentos ({})"],
+        ],
+        usageLines:usageLines(run,sumUsage(rows),["warmup","measure"]),
+        profiles:(run.models || []).filter(model => models.has(model.name)).map(model =>
+          `${model.name} (${model.version}) · ${toolMode(model.kind)}; reasoning=${model.kind==="decision" ? "N/A" : model.reasoning_effort ?? "omitido"}; verbosity=${model.kind==="decision" ? "N/A" : model.verbosity ?? "omitida"}`),
+        notes:[
+          ...reportCaveats,
+          "LLM function call nativo vs adaptador Decision. Sem Priority no Decision. Padding local não iguala tokens faturados.",
+          "Latências: corretas comparáveis apenas; acurácia: todos os attempts. Amostras pequenas não caracterizam cauda. Falhas e exclusões permanecem no consumo selecionado.",
+        ],
+      };
+    }
+    function toolRender(resetRaw=false) {
+      const run=toolRun(), groups=toolGroups(), columns=toolColumns[$("tools-view").value];
+      const head=$("tools-table-head"), body=$("tools-table-body");
+      head.replaceChildren(...["Modelo / versão","Interface","Processamento",...columns.map(([,label]) => label)].map(text => node("th",text)));
+      body.replaceChildren();
+      groups.forEach((group,index) => group.forEach((row,tierIndex) => {
+        const tr=node("tr",undefined,(tierIndex ? "" : "pair-start ")+(index%2 ? "pair-alternate" : ""));
+        const model=node("td");model.append(node("span",row.model,"model-name"),node("span",row.version,"version"));tr.append(model);
+        tr.append(node("td",toolMode(row.kind)),node("td",toolTier(row.requested_tier)));
+        for (const [field] of columns) { const cell=node("td",toolCell(row,field));cell.dataset.field=field;tr.append(cell); }
+        body.append(tr);
+      }));
+      if (!groups.length) { const row=node("tr"),cell=node("td","Nenhum resultado do agente nesta seleção.","empty");cell.colSpan=3+columns.length;row.append(cell);body.append(row); }
+      const report=toolReportSnapshot();
+      renderReportContext("tools-",report);
+      renderBrief("tools-overview","tools-brief",report.brief);
+      $("tools-caveats").replaceChildren(...report.brief.footer.map(line => node("p",line)));
+      $("tools-run-details").textContent=run ? JSON.stringify({settings:run.settings,models:run.models,tools:run.tools,cases:run.cases},null,2) : "Nenhuma execução.";
+      $("tools-sample-warning").hidden=!groups.some(group => group.some(row => !(row.comparable >= 30)));
+      $("tools-export").disabled=$("tools-export-image").disabled=!groups.length;
+      toolRenderRaw(resetRaw);
+    }
+    function toolDownload(blob,name) {
+      const url=URL.createObjectURL(blob),link=node("a");link.href=url;link.download=name;
+      document.body.append(link);link.click();link.remove();setTimeout(() => URL.revokeObjectURL(url),1000);
+    }
+    function toolCsv(raw=false) {
+      const rows=raw ? toolRawRows() : toolGroups().flat();
+      if (!rows.length) return;
+      const fields=["run_id",...new Set(rows.flatMap(row => Object.keys(row)))];
+      const cell=value => {
+        let text=value == null ? "" : typeof value === "object" ? JSON.stringify(value) : String(value);
+        if (/^[\s]*[=+@-]|^[\t\r]/.test(text) && !Number.isFinite(value)) text="'"+text;
+        return '"'+text.replaceAll('"','""')+'"';
+      };
+      const content="\ufeff"+[fields,...rows.map(row => fields.map(field => field === "run_id" ? toolRun().id :
+        !raw && (toolTiming(field) && !(row.comparable > 0) || field.endsWith("_sum") && !(row[field.replace("_sum","_reported")] > 0)) ? null : row[field]))].map(row => row.map(cell).join(",")).join("\r\n");
+      toolDownload(new Blob([content],{type:"text/csv;charset=utf-8"}),`tools-${raw ? "requests" : "summary"}-${toolRun().id}.csv`);
+    }
+    async function toolPng() {
+      $("tools-export-error").textContent="";
+      try {
+        const columns=toolColumns[$("tools-view").value], rows=toolGroups().flat();
+        if (!rows.length) return;
+        await compactPng({
+          title:"Agente · seleção de tools · "+$("tools-view").selectedOptions[0].textContent,
+          brief:toolReportSnapshot().brief,filename:`tools-${toolRun().id}.png`,
+          columns:[{label:"Modelo / versão",width:180},{label:"Interface",width:120},{label:"Processamento",width:156},
+            ...columns.map(([,label]) => ({label,width:100}))],
+          cells:rows.map(row => [row.model+"\n"+row.version,toolMode(row.kind),toolTier(row.requested_tier),...columns.map(([field]) => toolCell(row,field))]),
+        });
+      } catch (error) { $("tools-export-error").textContent=error.message; }
+    }
+    function toolApplyState(data) {
+      const job=data.job;
+      $("tools-job-startup").textContent=job ? startupText(job) : "";
+      toolBusy=Boolean(data.busy || job && activeStates.has(job.state));
+      toolOwnJob=Boolean(job && activeStates.has(job.state));
+      $("tools-settings").disabled=!toolConnected || toolBusy;
+      $("tools-cancel").disabled=!toolConnected || !toolOwnJob || job.state === "stopping";
+      if (!job) {
+        if (toolObservedJob!==null) { $("tools-error").textContent=""; toolObservedJob=null; }
+        $("tools-job-status").textContent=toolBusy ? "Outro benchmark ocupa o servidor. Aguarde a execução da outra aba." : "Nenhuma execução do agente ativa.";
+        toolEstimate();return;
+      }
+      if (toolObservedJob!==job.id) {
+        toolObservedJob=job.id;
+        if (!toolHistorySelection) toolFollow=job.id;
+      }
+      $("tools-job-status").textContent=`${({completed:"Concluído",completed_with_exclusions:"Concluído com exclusões",failed:"Falhou",cancelled:"Cancelado",running:"Executando",starting:"Preparando",stopping:"Cancelamento solicitado"}[job.state] || job.state)} · ${job.measured}/${job.expected}`;
+      $("tools-progress").max=job.expected || 1;$("tools-progress").value=job.measured || 0;
+      $("tools-log").textContent=(job.log || []).join("\n") || "Aguardando registro.";
+      $("tools-error").textContent=job.error || "";
+      const signature=job.id+":"+job.state;
+      if (job.run && (toolOwnJob || toolSettled!==signature)) {
+        const selected=$("tools-run").value,index=toolRuns.findIndex(run => run.id===job.run.id);
+        if (index>=0) toolRuns[index]=job.run; else toolRuns.unshift(job.run);
+        toolRunOptions(toolFollow===job.id || !selected ? job.run.id : selected);
+        if (toolFollow===job.id) toolFollow=null;
+        toolRender(true);
+      }
+      if (!toolOwnJob) toolSettled=signature;
+      toolEstimate();
+    }
+    async function toolPoll() {
+      clearTimeout(toolTimer);
+      try {
+        const data=await api("/api/tools/state");toolConnected=true;
+        $("tools-connection").textContent="Backend local conectado · autenticação somente no servidor.";
+        toolApplyState(data);
+      } catch (error) {
+        toolConnected=false;$("tools-settings").disabled=true;$("tools-start").disabled=true;$("tools-cancel").disabled=true;
+        $("tools-connection").textContent=`Backend de tools indisponível: ${error.message}. Resultados salvos preservados; isto não cancela chamadas já iniciadas.`;
+      }
+      if (!$("tools-panel").hidden || toolOwnJob) toolTimer=setTimeout(toolPoll,toolConnected ? 1000 : 3000);
+    }
+    async function toolsConnect(bootstrap) {
+      if (!bootstrap.tool_benchmark) return;
+      toolConfigure(bootstrap.tool_benchmark);toolConnected=true;toolEstimate();
+      try { const data=await api("/api/tools/runs");for (const run of data.runs || []) {const index=toolRuns.findIndex(item => item.id===run.id);if (index<0) toolRuns.push(run);else toolRuns[index]=run;} toolRunOptions();toolRender(true); }
+      catch (error) { $("tools-error").textContent="Histórico indisponível: "+error.message; }
+      toolPoll();
+    }
+    for (const id of ["token-tab","tools-tab"]) {
+      $(id).addEventListener("click",() => {
+        for (const tab of ["token","tools"]) {const selected=id===tab+"-tab";$(tab+"-tab").setAttribute("aria-selected",String(selected));$(tab+"-tab").tabIndex=selected ? 0 : -1;$(tab+"-panel").hidden=!selected;}
+        if (id==="tools-tab" && apiToken) toolPoll();
+      });
+      $(id).addEventListener("keydown",event => {
+        if (!["ArrowLeft","ArrowRight","Home","End"].includes(event.key)) return;
+        event.preventDefault();const target=event.key==="Home" ? "token-tab" : event.key==="End" ? "tools-tab" : id==="tools-tab" ? "token-tab" : "tools-tab";
+        $(target).click();$(target).focus();
+      });
+    }
+    $("tools-padding").addEventListener("input",() => {$("tools-padding-number").value=$("tools-padding").value;toolEstimate();});
+    $("tools-padding-number").addEventListener("input",() => {$("tools-padding").value=$("tools-padding-number").value;toolEstimate();});
+    $("tools-settings").addEventListener("input",toolEstimate);
+    $("tools-settings").addEventListener("change",toolEstimate);
+    $("tools-run").addEventListener("change",() => {
+      toolHistorySelection=$("tools-run").value!==toolObservedJob;
+      toolFollow=null;toolRender(true);
+    });
+    for (const id of ["tools-sort","tools-direction","tools-view"]) $(id).addEventListener("change",() => toolRender());
+    $("tools-search").addEventListener("input",() => toolRender());
+    for (const id of ["tools-raw-status","tools-raw-model","tools-raw-case","tools-raw-sort"]) $(id).addEventListener("change",() => toolRenderRaw());
+    $("tools-export").addEventListener("click",() => toolCsv());
+    $("tools-export-raw").addEventListener("click",() => toolCsv(true));
+    $("tools-export-image").addEventListener("click",toolPng);
+    $("share-chart").addEventListener("click",() => shareReport("token"));
+    $("share-tools").addEventListener("click",() => shareReport("tools"));
+    $("exit-share").addEventListener("click",exitShare);
+    document.addEventListener("keydown",event => { if (event.key==="Escape") exitShare(); });
+    $("tools-start").addEventListener("click",async() => {
+      $("tools-start").disabled=true;$("tools-error").textContent="";
+      try {
+        const job=await api("/api/tools/start",toolSettings());toolFollow=job.id;toolHistorySelection=false;$("tools-billing").checked=false;
+        toolBusy=toolOwnJob=jobBusy=true;$("live-settings").disabled=true;$("start").disabled=true;$("tools-settings").disabled=true;
+        await toolPoll();
+      } catch (error) { $("tools-error").textContent=error.message;toolEstimate(); }
+    });
+    $("tools-cancel").addEventListener("click",async() => {
+      $("tools-cancel").disabled=true;
+      try {await api("/api/cancel",{});await toolPoll();}
+      catch (error) {$("tools-error").textContent=error.message;$("tools-cancel").disabled=!toolOwnJob;}
+    });
+    toolConfigure(toolCatalog);toolRunOptions();toolRender(true);
+    updateRunOptions();
+    const preferred = [...DATA.runs].sort((a,b) => {
+      return Number(b.completed && b.summary.length>0)-Number(a.completed && a.summary.length>0) || b.id.localeCompare(a.id);
+    })[0];
+    $("run").value = preferred.id;
+    options($("metric"), Object.entries(METRICS).map(([key,value]) => [key, value[0]]), "total_ms");
+    $("run").addEventListener("change",resetInputs);
+    $("input").addEventListener("change",resetOutputs);
+    $("output").addEventListener("change",resetModels);
+    for (const id of ["model","metric","stat","sort","excluded","table-view","pair-filter","table-sort","table-reference","table-direction"]) $(id).addEventListener("change",render);
+    $("result-search").addEventListener("input",render);
+    $("clear-result-filters").addEventListener("click",() => {
+      $("model").value="all"; $("result-search").value=""; $("pair-filter").value="all"; render();
+    });
+    $("theme").addEventListener("click",() => document.documentElement.dataset.theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+    $("export").addEventListener("click",downloadCsv);
+    $("export-image").addEventListener("click",() => downloadImage());
+    $("export-chart-image").addEventListener("click",() => downloadImage(true));
+    $("footer").textContent = `Snapshot gerado em ${new Date(DATA.generated_at).toLocaleString("pt-BR")} · ${DATA.runs.length} execuções incorporadas · Sem dependências externas.`;
+    resetInputs();
+    connectLive();
+  </script>
+</body>
+</html>

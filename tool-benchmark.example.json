@@ -1,0 +1,12 @@
+{
+  "profile": "tool-routing-v1",
+  "decision_model": {
+    "name": "Microsoft-Decision-1",
+    "deployment": "decision-1",
+    "version": "1",
+    "kind": "decision",
+    "endpoint": "https://YOUR_FOUNDRY_ACCOUNT.services.ai.azure.com/providers/microsoft/v1/systemone",
+    "sku": "GlobalStandard",
+    "capacity": 100
+  }
+}

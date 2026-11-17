@@ -1,0 +1,20 @@
+{
+  "subscription_id": "00000000-0000-0000-0000-000000000000",
+  "resource_group": "rg-model-latency-benchmark",
+  "account": "YOUR_FOUNDRY_ACCOUNT",
+  "project": "YOUR_FOUNDRY_PROJECT",
+  "location": "brazilsouth",
+  "endpoint": "https://YOUR_FOUNDRY_ACCOUNT.openai.azure.com/openai/v1/",
+  "capacity": 100,
+  "models": [
+    {"name": "gpt-6-sol", "version": "2026-09-22", "reasoning_effort": "none", "verbosity": "low"},
+    {"name": "gpt-5.6-terra", "version": "2026-07-09", "reasoning_effort": "none", "verbosity": "low"},
+    {"name": "gpt-5.6-sol", "version": "2026-07-09", "reasoning_effort": "none", "verbosity": "low"},
+    {"name": "gpt-5.5", "version": "2026-04-24", "reasoning_effort": "none", "verbosity": "low"},
+    {"name": "gpt-5.4-mini", "version": "2026-03-17", "reasoning_effort": "none", "verbosity": "low"},
+    {"name": "gpt-5.4", "version": "2026-03-05", "reasoning_effort": "none", "verbosity": "low"},
+    {"name": "gpt-5.2", "version": "2025-12-11", "reasoning_effort": "none", "verbosity": "low"},
+    {"name": "gpt-5.1", "version": "2025-11-13", "reasoning_effort": "none", "verbosity": "low"},
+    {"name": "gpt-4.1", "version": "2025-04-14", "reasoning_effort": null}
+  ]
+}
